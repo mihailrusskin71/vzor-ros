@@ -1,0 +1,132 @@
+// js/main.js
+import { FilmManager } from './modules/filmManager.js';
+import { UserManager } from './modules/userManager.js';
+import { ContentManager } from './modules/contentManager.js';
+import { initModals, showMovieInfo, showAuthModal, updateUserProfile, showSaveNotification, showSavedMovies, showMyReviews, showEditMovieModal, showReviewsModal, showReviewsModalForCurrentMovie, showFiltersModal, removeFilter, showContentFiltersModal, removeContentFilter } from './modules/modals.js';
+import { initSearch } from './modules/search.js';
+import { initAdmin, showAdminPanel } from './modules/admin.js';
+import { showAdminMessage, showRatingNotification, showReviewNotification, setupSecretAdmin } from './modules/utils.js';
+import { PARTNERS, CONTENT_TYPES } from './modules/constants.js';
+
+// Сделать константы глобальными для обратной совместимости
+window.PARTNERS = PARTNERS;
+window.CONTENT_TYPES = CONTENT_TYPES;
+
+// Глобальные переменные
+window.filmManager = null;
+window.userManager = null;
+window.contentManager = null;
+
+// Filter variables
+window.currentPartnerFilter = 'all';
+window.currentGenreFilter = 'all';
+window.currentYearFrom = '';
+window.currentYearTo = '';
+window.currentContentType = 'all';
+window.currentContentPartnerFilter = 'all';
+window.currentContentGenreFilter = 'all';
+window.currentContentYearFrom = '';
+window.currentContentYearTo = '';
+
+// Глобальные функции для обратной совместимости
+window.showMovieInfo = showMovieInfo;
+window.showAuthModal = showAuthModal;
+window.updateUserProfile = updateUserProfile;
+window.showSaveNotification = showSaveNotification;
+window.showSavedMovies = showSavedMovies;
+window.showMyReviews = showMyReviews;
+window.showEditMovieModal = showEditMovieModal;
+window.showReviewsModal = showReviewsModal;
+window.showReviewsModalForCurrentMovie = showReviewsModalForCurrentMovie;
+window.showFiltersModal = showFiltersModal;
+window.removeFilter = removeFilter;
+window.showContentFiltersModal = showContentFiltersModal;
+window.removeContentFilter = removeContentFilter;
+window.showAdminPanel = showAdminPanel;
+window.showAdminMessage = showAdminMessage;
+window.showRatingNotification = showRatingNotification;
+window.showReviewNotification = showReviewNotification;
+
+// Функции для модальных окон
+window.rateMovie = function(rating) {
+    if (!window.filmManager.currentMovieId) return;
+    
+    const userRating = window.filmManager.getUserRating(window.filmManager.currentMovieId);
+    
+    if (userRating > 0) {
+        showRatingNotification(userRating, true);
+        return;
+    }
+    
+    window.filmManager.addUserRating(window.filmManager.currentMovieId, rating);
+    showRatingNotification(rating, false);
+};
+
+window.submitReview = function() {
+    if (!window.filmManager.currentMovieId) return;
+    
+    if (!window.userManager.currentUser) {
+        showAuthModal();
+        return;
+    }
+    
+    const reviewText = document.getElementById('reviewText')?.value.trim();
+    const rating = parseInt(document.getElementById('reviewRating')?.value);
+    
+    if (!reviewText) {
+        alert('Пожалуйста, напишите текст отзыва');
+        return;
+    }
+    
+    const reviewData = {
+        text: reviewText,
+        rating: rating,
+        author: window.userManager.currentUser.username,
+        userId: window.userManager.currentUser.id
+    };
+    
+    const newReview = window.filmManager.addReview(window.filmManager.currentMovieId, reviewData);
+    
+    if (newReview) {
+        document.getElementById('reviewText').value = '';
+        document.getElementById('reviewRating').value = '5';
+        showReviewNotification();
+    }
+};
+
+window.showReviewsModalForCurrentMovie = function() {
+    if (!window.filmManager.currentMovieId) return;
+    
+    const movie = window.filmManager.films.find(m => m.id == window.filmManager.currentMovieId);
+    if (movie) {
+        showReviewsModal(movie);
+    }
+};
+
+// Функции для фильтров
+window.removeFilter = removeFilter;
+window.removeContentFilter = removeContentFilter;
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing Vzorkino...');
+    
+    try {
+        // Initialize managers
+        window.filmManager = new FilmManager();
+        window.userManager = new UserManager();
+        window.contentManager = new ContentManager();
+        
+        // Initialize modules
+        initModals();
+        initSearch();
+        initAdmin();
+        setupSecretAdmin();
+        
+        // Update UI
+        updateUserProfile();
+        
+        console.log('Vzorkino initialized successfully');
+    } catch (error) {
+        console.error('Error initializing Vzorkino:', error);
+    }
+});
