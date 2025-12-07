@@ -1,63 +1,298 @@
 // modules/filmManager.js
 // ===== FILM MANAGEMENT =====
-import { PARTNERS, CONTENT_TYPES } from './constants.js';
+import { PARTNERS, CONTENT_TYPES, ROW_TYPES } from './constants.js';
 import { showAdminMessage } from './utils.js';
 
 export class FilmManager {
     constructor() {
-        this.films = this.loadFilms();
-        this.OMDB_API_KEY = "3ad23de4";
+        this.SUPABASE_URL = 'https://qolbgrvlkadqnfnprbgr.supabase.co';
+        this.SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvbGJncnZsa2FkcW5mbnByYmdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NzUwMTAsImV4cCI6MjA3ODU1MTAxMH0.XYg5fhJ7ve_UVhAg_fzk4oJFEpje6zb4To-7DIhDgws';
+        this.POISK_KINO_API_KEY = "QHABHFK-P68MM3H-GQFQB7D-1VRGXYQ";
         this.currentMovieId = null;
-        this.migrateOldFilms();
+        this.films = [];
+        this.customRows = this.loadCustomRows();
+        
+        this.init();
     }
     
-    loadFilms() {
+    async init() {
+        await this.loadFilmsWithCache();
+    }
+    
+    async loadFilmsWithCache() {
+        // 1. СНАЧАЛА мгновенно показываем фильмы из кэша
+        const cached = localStorage.getItem('vzorkino_films_cache');
+        if (cached) {
+            this.films = JSON.parse(cached);
+            console.log(`⚡ Показано ${this.films.length} фильмов из кэша`);
+            
+            this.preloadImages();
+            
+            if (window.contentManager) {
+                setTimeout(() => {
+                    window.contentManager.refreshAllSections();
+                }, 50);
+            }
+        }
+        
+        // 2. ПОТОМ в фоне грузим свежие данные из Supabase
+        setTimeout(async () => {
+            await this.loadFilmsFromSupabase();
+        }, 100);
+    }
+    
+    async loadFilmsFromSupabase() {
         try {
-            const saved = localStorage.getItem('vzorkino_films');
-            return saved ? JSON.parse(saved) : [];
+            console.log('🔄 Загружаем фильмы из Supabase...');
+            
+            const response = await fetch(`${this.SUPABASE_URL}/rest/v1/films?select=*&order=created_at.desc`, {
+                headers: {
+                    'apikey': this.SUPABASE_KEY,
+                    'Authorization': `Bearer ${this.SUPABASE_KEY}`
+                }
+            });
+            
+            if (response.ok) {
+                const films = await response.json();
+                this.films = films.map(film => this.normalizeFilmData(film));
+                console.log(`✅ Загружено ${films.length} фильмов из Supabase`);
+                
+                localStorage.setItem('vzorkino_films_cache', JSON.stringify(this.films));
+                this.preloadImages();
+                
+                if (window.contentManager) {
+                    setTimeout(() => {
+                        window.contentManager.refreshAllSections();
+                    }, 100);
+                }
+                
+                return this.films;
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
         } catch (error) {
-            console.error('Error loading films:', error);
+            console.error('❌ Ошибка загрузки из Supabase:', error);
+            
+            const cached = localStorage.getItem('vzorkino_films_cache');
+            if (cached) {
+                this.films = JSON.parse(cached);
+                console.log(`✅ Загружено ${this.films.length} фильмов из кэша`);
+                return this.films;
+            }
+            
+            this.films = [];
             return [];
         }
     }
     
-    saveFilms() {
+    preloadImages() {
+        if (!this.films || this.films.length === 0) return;
+        
+        console.log('🖼️ Предзагружаем обложки...');
+        this.films.forEach(film => {
+            if (film.img && !film.img.includes('data:image/svg+xml')) {
+                const img = new Image();
+                img.src = film.img;
+                img.onerror = () => {
+                    // Если изображение не загружается, заменяем на placeholder
+                    console.log(`❌ Ошибка загрузки изображения для ${film.title}, заменяем на placeholder`);
+                    film.img = this.generatePlaceholder(film.title);
+                };
+            } else if (!film.img) {
+                // Если изображения нет, создаем placeholder
+                film.img = this.generatePlaceholder(film.title);
+            }
+        });
+    }
+    
+    async saveFilmToSupabase(film) {
         try {
-            localStorage.setItem('vzorkino_films', JSON.stringify(this.films));
+            console.log('💾 Сохраняем фильм в Supabase:', film.title);
+            
+            const filmData = {
+                title: film.title || '',
+                year: film.year || new Date().getFullYear(),
+                rating: film.rating || 7.0,
+                genre: film.genre || 'Фильм',
+                duration: film.duration || '120 мин',
+                country: film.country || 'Россия',
+                partner: film.partner || 'okko',
+                img: film.img || this.generatePlaceholder(film.title),
+                description: film.description || `Фильм "${film.title}"`,
+                director: film.director || 'Режиссер',
+                actors: film.actors || 'Актеры',
+                content_type: film.contentType || 'movie',
+                seasons: film.seasons || 1,
+                kp_id: film.kpId || null,
+                featured_data: film.featuredRows || [],
+                partner_data: film.partnerLinks || {},
+                tags: film.tags || [],
+                reviews: film.reviews || [],
+                user_ratings: film.userRatings || []
+            };
+            
+            console.log('📤 Отправляем данные:', filmData);
+            
+            const response = await fetch(`${this.SUPABASE_URL}/rest/v1/films`, {
+                method: 'POST',
+                headers: {
+                    'apikey': this.SUPABASE_KEY,
+                    'Authorization': `Bearer ${this.SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify(filmData)
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Фильм сохранен в Supabase:', result[0]);
+                
+                const normalizedFilm = this.normalizeFilmData(result[0]);
+                this.films.unshift(normalizedFilm);
+                localStorage.setItem('vzorkino_films_cache', JSON.stringify(this.films));
+                
+                if (window.contentManager) {
+                    setTimeout(() => {
+                        window.contentManager.refreshAllSections();
+                    }, 100);
+                }
+                
+                return normalizedFilm;
+            } else {
+                const errorText = await response.text();
+                console.error('❌ Ошибка Supabase:', errorText);
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
         } catch (error) {
-            console.error('Error saving films:', error);
+            console.error('❌ Ошибка сохранения в Supabase:', error);
+            throw error;
         }
     }
     
-    migrateOldFilms() {
-        let needsUpdate = false;
-        
-        this.films = this.films.map(film => {
-            const updatedFilm = this.updateOldFilm(film);
+    async deleteFilm(filmId) {
+        try {
+            // Находим фильм перед удалением
+            const film = this.films.find(f => f.id == filmId);
             
-            if (!film.reviews || !film.tags || !film.createdAt || !film.userRatings || !film.contentType) {
-                needsUpdate = true;
+            const response = await fetch(`${this.SUPABASE_URL}/rest/v1/films?id=eq.${filmId}`, {
+                method: 'DELETE',
+                headers: {
+                    'apikey': this.SUPABASE_KEY,
+                    'Authorization': `Bearer ${this.SUPABASE_KEY}`
+                }
+            });
+            
+            if (response.ok) {
+                this.films = this.films.filter(film => film.id != filmId);
+                localStorage.setItem('vzorkino_films_cache', JSON.stringify(this.films));
+                console.log('✅ Фильм удален из базы');
+                
+                if (window.contentManager) {
+                    setTimeout(() => {
+                        window.contentManager.refreshAllSections();
+                    }, 100);
+                }
+                
+                return true;
+            } else {
+                throw new Error(`HTTP ${response.status}`);
             }
-            
-            return updatedFilm;
-        });
-        
-        if (needsUpdate) {
-            this.saveFilms();
+        } catch (error) {
+            console.error('❌ Ошибка удаления из базы:', error);
+            this.films = this.films.filter(film => film.id != filmId);
+            localStorage.setItem('vzorkino_films_cache', JSON.stringify(this.films));
+            return false;
         }
+    }
+    
+    async updateFilmInSupabase(filmId, updates) {
+        try {
+            const supabaseUpdates = {};
+            Object.keys(updates).forEach(key => {
+                if (key === 'contentType') supabaseUpdates.content_type = updates[key];
+                else if (key === 'partnerLinks') supabaseUpdates.partner_data = updates[key];
+                else if (key === 'userRatings') supabaseUpdates.user_ratings = updates[key];
+                else if (key === 'featuredRows') supabaseUpdates.featured_data = updates[key];
+                else supabaseUpdates[key] = updates[key];
+            });
+            
+            const response = await fetch(`${this.SUPABASE_URL}/rest/v1/films?id=eq.${filmId}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': this.SUPABASE_KEY,
+                    'Authorization': `Bearer ${this.SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify({
+                    ...supabaseUpdates,
+                    updated_at: new Date().toISOString()
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Фильм обновлен в Supabase:', result[0]);
+                return true;
+            } else {
+                const errorText = await response.text();
+                console.error('❌ Ошибка обновления в Supabase:', errorText);
+                return false;
+            }
+        } catch (error) {
+            console.error('Ошибка обновления в Supabase:', error);
+            return false;
+        }
+    }
+    
+    normalizeFilmData(film) {
+        const normalizedFilm = {
+            id: film.id,
+            title: film.title,
+            year: film.year,
+            rating: film.rating,
+            genre: film.genre,
+            duration: film.duration,
+            country: film.country,
+            partner: film.partner,
+            img: film.img || this.generatePlaceholder(film.title),
+            description: film.description,
+            director: film.director,
+            actors: film.actors,
+            reviews: film.reviews || film.user_ratings || [],
+            tags: film.tags || [],
+            userRatings: film.user_ratings || [],
+            contentType: film.content_type || 'movie',
+            seasons: film.seasons || 1,
+            episodes: film.episodes || 1,
+            partnerLinks: film.partner_data || {},
+            kpId: film.kp_id,
+            createdAt: film.created_at,
+            updatedAt: film.updated_at,
+            featuredRows: film.featured_data || []
+        };
+        
+        // Убедимся, что у всех фильмов есть изображение
+        if (!normalizedFilm.img || normalizedFilm.img.includes('placeholder.com') || normalizedFilm.img.includes('ffffff')) {
+            normalizedFilm.img = this.generatePlaceholder(normalizedFilm.title);
+        }
+        
+        return normalizedFilm;
     }
     
     getTemplate() {
         return {
             id: null,
             title: "",
+
             year: new Date().getFullYear(),
             rating: 7.0,
             genre: "Фильм",
             duration: "120 мин",
             country: "США",
             partner: "okko",
-            img: "",
+            img: this.generatePlaceholder(""),
             description: "",
             director: "",
             actors: "",
@@ -75,64 +310,286 @@ export class FilmManager {
                 kion: "",
                 premier: "",
                 kinopoisk: ""
-            }
+            },
+            featuredRows: []
         };
     }
     
-    updateOldFilm(oldFilm) {
-        const template = this.getTemplate();
-        return { ...template, ...oldFilm };
-    }
-    
-    deleteFilm(filmId) {
-        this.films = this.films.filter(film => film.id != filmId);
-        this.saveFilms();
-    }
-    
-    updateFilm(filmId, updatedData) {
-        const filmIndex = this.films.findIndex(film => film.id == filmId);
-        if (filmIndex !== -1) {
-            this.films[filmIndex] = { ...this.films[filmIndex], ...updatedData };
-            this.saveFilms();
-            return true;
-        }
-        return false;
-    }
-    
-    addReview(filmId, reviewData) {
-        const filmIndex = this.films.findIndex(film => film.id == filmId);
-        if (filmIndex !== -1) {
-            if (!this.films[filmIndex].reviews) {
-                this.films[filmIndex].reviews = [];
-            }
+    async autoAddFilm(movieTitle, year = null, contentType = "movie") {
+        try {
+            showAdminMessage('⏳ Ищем фильм и генерируем партнерские ссылки...', 'info');
             
-            const newReview = {
-                id: Date.now(),
-                text: reviewData.text,
-                rating: reviewData.rating,
-                date: new Date().toISOString(),
-                author: reviewData.author || "Аноним",
-                userId: reviewData.userId || null
+            const filmData = await this.searchPoiskKino(movieTitle, year, contentType);
+            
+            if (filmData) {
+                const partnerLinks = await this.generatePartnerLinks(filmData.title, filmData.year, contentType);
+                
+                const newFilm = {
+                    ...this.getTemplate(),
+                    title: filmData.title,
+                    year: filmData.year,
+                    rating: filmData.rating,
+                    genre: filmData.genre,
+                    duration: filmData.duration,
+                    country: filmData.country,
+                    img: filmData.img || this.generatePlaceholder(filmData.title),
+                    description: filmData.description,
+                    director: filmData.director,
+                    actors: filmData.actors,
+                    contentType: contentType,
+                    seasons: filmData.seasons || 1,
+                    partnerLinks: partnerLinks,
+                    tags: [filmData.genre],
+                    kpId: filmData.kpId
+                };
+                
+                const savedFilm = await this.saveFilmToSupabase(newFilm);
+                
+                if (savedFilm) {
+                    showAdminMessage(`✅ "${filmData.title}" добавлен в базу!`);
+                    return savedFilm;
+                }
+            } else {
+                return await this.alternativeSearch(movieTitle, year, contentType);
+            }
+        } catch (error) {
+            console.error("AutoAdd error:", error);
+            showAdminMessage('❌ Ошибка при добавлении', 'error');
+            return await this.alternativeSearch(movieTitle, year, contentType);
+        }
+    }
+    
+    isCurrentYear(year) {
+        return year === new Date().getFullYear();
+    }
+    
+    async generatePartnerLinks(title, year, contentType) {
+        const encodedTitle = encodeURIComponent(title);
+        
+        return {
+            okko: `https://okko.tv/search/${encodedTitle}`,
+            ivi: `https://www.ivi.ru/search/?q=${encodedTitle}`,
+            wink: `https://wink.ru/search?query=${encodedTitle}`,
+            kion: `https://kion.ru/search?query=${encodedTitle}`,
+            premier: `https://premier.one/search?q=${encodedTitle}`,
+            kinopoisk: `https://www.kinopoisk.ru/index.php?kp_query=${encodedTitle}`,
+            moretv: `https://more.tv/search?query=${encodedTitle}`,
+            start: `https://start.ru/search?query=${encodedTitle}`,
+            google: `https://www.google.com/search?q=${encodedTitle}+смотреть+онлайн`,
+            youtube: `https://www.youtube.com/results?search_query=${encodedTitle}+трейлер`
+        };
+    }
+    
+    async searchPoiskKino(title, year = null, contentType = "movie") {
+        try {
+            console.log(`🔍 Searching PoiskKino for: "${title}"`);
+            
+            const typeMap = {
+                'movie': 'movie',
+                'series': 'tv-series',
+                'cartoon': 'animated-series'
             };
             
-            this.films[filmIndex].reviews.unshift(newReview);
-            this.saveFilms();
+            const apiType = typeMap[contentType] || 'movie';
             
-            if (window.userManager && window.userManager.currentUser && reviewData.userId) {
-                window.userManager.addUserReview(filmId, {
-                    text: reviewData.text,
-                    rating: reviewData.rating,
-                    movieTitle: this.films[filmIndex].title,
-                    moviePoster: this.films[filmIndex].img
-                });
+            let url = `https://api.poiskkino.dev/v1.4/movie/search?query=${encodeURIComponent(title)}&limit=5`;
+            if (year) url += `&year=${year}`;
+            
+            const response = await fetch(url, {
+                headers: { 'X-API-KEY': this.POISK_KINO_API_KEY }
+            });
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            const data = await response.json();
+            
+            if (data.docs && data.docs.length > 0) {
+                let bestMatch = data.docs[0];
+                if (year) {
+                    const exactMatch = data.docs.find(movie => movie.year == year);
+                    if (exactMatch) bestMatch = exactMatch;
+                }
+                
+                const typeMatch = data.docs.find(movie => movie.type === apiType);
+                if (typeMatch) bestMatch = typeMatch;
+                
+                return this.formatPoiskKinoData(bestMatch, contentType);
             }
             
-            return newReview;
+            return null;
+        } catch (error) {
+            console.error('PoiskKino API error:', error);
+            return null;
         }
-        return null;
     }
     
-    addUserRating(filmId, rating, userId = "defaultUser") {
+    formatPoiskKinoData(movieData, contentType) {
+        let posterUrl = null;
+        if (movieData.poster) {
+            posterUrl = movieData.poster.url || movieData.poster.previewUrl;
+        }
+        
+        let rating = 7.0;
+        if (movieData.rating) {
+            rating = movieData.rating.kp || movieData.rating.imdb || 7.0;
+        }
+        
+        let genre = 'Фильм';
+        if (movieData.genres && movieData.genres.length > 0) {
+            genre = movieData.genres[0].name;
+        } else {
+            genre = this.getGenreByContentType(contentType);
+        }
+        
+        let country = 'Россия';
+        if (movieData.countries && movieData.countries.length > 0) {
+            country = movieData.countries[0].name;
+        }
+        
+        let description = movieData.description || movieData.shortDescription;
+        if (!description) {
+            description = `"${movieData.name || movieData.alternativeName}" - ${this.getContentTypeDescription(contentType)}`;
+        }
+        
+        let duration = '120 мин';
+        if (movieData.movieLength) {
+            duration = `${movieData.movieLength} мин`;
+        } else if (contentType === 'series') {
+            duration = '45 мин серия';
+        } else if (contentType === 'cartoon') {
+            duration = '90 мин';
+        }
+        
+        return {
+            title: movieData.name || movieData.alternativeName,
+            originalTitle: movieData.alternativeName || movieData.enName || '',
+            year: movieData.year || new Date().getFullYear(),
+            rating: parseFloat(rating.toFixed(1)),
+            description: description,
+            img: posterUrl,
+            genre: genre,
+            country: country,
+            director: this.extractDirector(movieData),
+            actors: this.extractActors(movieData),
+            kpId: movieData.id,
+            contentType: contentType,
+            seasons: movieData.seasonsInfo ? movieData.seasonsInfo.length : 1,
+            duration: duration
+        };
+    }
+    
+    extractDirector(movieData) {
+        if (!movieData.persons) return 'Режиссер';
+        const director = movieData.persons.find(p => 
+            p.enProfession === 'director' || 
+            (p.profession && p.profession.toLowerCase().includes('режиссер'))
+        );
+        return director ? director.name : 'Режиссер';
+    }
+    
+    extractActors(movieData) {
+        if (!movieData.persons) return 'Актеры';
+        const actors = movieData.persons
+            .filter(p => p.enProfession === 'actor' || 
+                       (p.profession && p.profession.toLowerCase().includes('актер')))
+            .slice(0, 5)
+            .map(p => p.name || p.enName || 'Актер');
+        return actors.length > 0 ? actors.join(', ') : 'Актеры';
+    }
+    
+    getGenreByContentType(contentType) {
+        switch(contentType) {
+            case "series": return "Сериал";
+            case "cartoon": return "Мультфильм";
+            default: return "Фильм";
+        }
+    }
+    
+    getContentTypeDescription(contentType) {
+        switch(contentType) {
+            case "series": return "сериал";
+            case "cartoon": return "мультфильм";
+            default: return "фильм";
+        }
+    }
+    
+    async alternativeSearch(title, year, contentType) {
+        const partnerLinks = await this.generatePartnerLinks(title, year, contentType);
+        
+        const newFilm = {
+            ...this.getTemplate(),
+            title: title,
+            year: year || new Date().getFullYear(),
+            rating: 7.5,
+            genre: this.getGenreByContentType(contentType),
+            duration: contentType === "movie" ? "120 мин" : "45 мин",
+            country: "Россия",
+            img: this.generatePlaceholder(title),
+            description: `${title} - ${this.getContentTypeDescription(contentType)}`,
+            director: "Режиссер",
+            actors: "Актеры",
+            contentType: contentType,
+            partnerLinks: partnerLinks,
+            tags: [this.getGenreByContentType(contentType)]
+        };
+        
+        try {
+            const savedFilm = await this.saveFilmToSupabase(newFilm);
+            if (savedFilm) {
+                showAdminMessage(`✅ "${title}" добавлен через альтернативный поиск!`);
+                return savedFilm;
+            }
+        } catch (error) {
+            console.error('Error saving alternative film:', error);
+            showAdminMessage('❌ Ошибка при добавлении', 'error');
+            throw error;
+        }
+    }
+    
+    generatePlaceholder(title) {
+        // Создаем простой цветной placeholder без текста
+        const colors = ['#1a1a24', '#2a2a3a', '#3a3a4a', '#4a4a5a'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        
+        // Создаем простой SVG с цветным фоном без текста
+        const svg = `
+            <svg width="300" height="450" xmlns="http://www.w3.org/2000/svg">
+                <rect width="100%" height="100%" fill="${color}"/>
+                <rect x="20%" y="40%" width="60%" height="20%" fill="${this.darkenColor(color, 0.2)}" rx="5" ry="5"/>
+            </svg>
+        `;
+        
+        // Конвертируем SVG в data URL
+        return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+    }
+    
+    darkenColor(color, amount) {
+        // Простая функция для затемнения цвета
+        const hex = color.replace('#', '');
+        const num = parseInt(hex, 16);
+        const amt = Math.round(2.55 * amount * 100);
+        const R = (num >> 16) - amt;
+        const G = (num >> 8 & 0x00FF) - amt;
+        const B = (num & 0x0000FF) - amt;
+        return "#" + (
+            0x1000000 +
+            (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+            (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+            (B < 255 ? B < 1 ? 0 : B : 255)
+        ).toString(16).slice(1);
+    }
+    
+    async bulkAddFilms(filmList) {
+        const results = [];
+        for (const film of filmList) {
+            const result = await this.autoAddFilm(film.title, film.year, film.contentType);
+            results.push(result);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        return results;
+    }
+    
+    async addUserRating(filmId, rating, userId = "defaultUser") {
         const filmIndex = this.films.findIndex(film => film.id == filmId);
         if (filmIndex !== -1) {
             if (!this.films[filmIndex].userRatings) {
@@ -149,8 +606,51 @@ export class FilmManager {
                 date: new Date().toISOString()
             });
             
-            this.saveFilms();
+            await this.updateFilmInSupabase(filmId, {
+                user_ratings: this.films[filmIndex].userRatings
+            });
+            
+            localStorage.setItem('vzorkino_films_cache', JSON.stringify(this.films));
+            
             return rating;
+        }
+        return null;
+    }
+    
+    async addReview(filmId, reviewData) {
+        const filmIndex = this.films.findIndex(film => film.id == filmId);
+        if (filmIndex !== -1) {
+            if (!this.films[filmIndex].reviews) {
+                this.films[filmIndex].reviews = [];
+            }
+            
+            const newReview = {
+                id: Date.now(),
+                text: reviewData.text,
+                rating: reviewData.rating,
+                date: new Date().toISOString(),
+                author: reviewData.author || "Аноним",
+                userId: reviewData.userId || null
+            };
+            
+            this.films[filmIndex].reviews.unshift(newReview);
+            
+            await this.updateFilmInSupabase(filmId, {
+                reviews: this.films[filmIndex].reviews
+            });
+            
+            localStorage.setItem('vzorkino_films_cache', JSON.stringify(this.films));
+            
+            if (window.userManager && window.userManager.currentUser && reviewData.userId) {
+                window.userManager.addUserReview(filmId, {
+                    text: reviewData.text,
+                    rating: reviewData.rating,
+                    movieTitle: this.films[filmIndex].title,
+                    moviePoster: this.films[filmIndex].img
+                });
+            }
+            
+            return newReview;
         }
         return null;
     }
@@ -172,324 +672,131 @@ export class FilmManager {
         }
         return "0.0";
     }
-
-    async translateToEnglish(title) {
-        if (/^[a-zA-Z0-9\s\-\':,.!?]+$/.test(title)) {
-            return title;
+    
+    updateFilm(filmId, updatedData) {
+        const filmIndex = this.films.findIndex(film => film.id == filmId);
+        if (filmIndex !== -1) {
+            this.films[filmIndex] = { ...this.films[filmIndex], ...updatedData };
+            localStorage.setItem('vzorkino_films_cache', JSON.stringify(this.films));
+            
+            return true;
         }
-        
+        return false;
+    }
+    
+    // Методы для управления кастомными рядами
+    
+    loadCustomRows() {
         try {
-            const response = await fetch(
-                `https://api.mymemory.translated.net/get?q=${encodeURIComponent(title)}&langpair=ru|en`
-            );
-            const data = await response.json();
-            
-            if (data && data.responseData && data.responseData.translatedText) {
-                return data.responseData.translatedText;
-            }
+            const saved = localStorage.getItem('vzorkino_custom_rows');
+            return saved ? JSON.parse(saved) : {};
         } catch (error) {
-            console.log('MyMemory Translate не сработал, используем транслитерацию');
+            console.error('Error loading custom rows:', error);
+            return {};
         }
-        
-        return this.simpleTransliteration(title);
     }
     
-    simpleTransliteration(title) {
-        const map = {
-            'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 
-            'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 
-            'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 
-            'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch', 
-            'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
-        };
-        
-        return title.toLowerCase().split('').map(char => map[char] || char).join('');
-    }
-    
-    async autoAddFilm(movieTitle, year = null, contentType = "movie") {
+    saveCustomRows() {
         try {
-            showAdminMessage('⏳ Ищу фильм и перевожу на русский...', 'info');
-            
-            let searchTitle = movieTitle;
-            
-            if (/[а-яА-Я]/.test(movieTitle)) {
-                searchTitle = await this.translateToEnglish(movieTitle);
-            }
-            
-            let searchQueries = [
-                searchTitle,
-                movieTitle,
-                searchTitle.replace(/[^a-zA-Z0-9\s]/g, ''),
-                movieTitle.replace(/[^a-zA-Z0-9\s]/g, '')
-            ];
-            
-            let data = null;
-            
-            for (let query of searchQueries) {
-                if (!query.trim()) continue;
-                
-                try {
-                    let response = await fetch(
-                        `https://www.omdbapi.com/?t=${encodeURIComponent(query)}&y=${year}&apikey=${this.OMDB_API_KEY}`
-                    );
-                    let result = await response.json();
-                    
-                    if (result.Response === "True") {
-                        data = result;
-                        break;
-                    }
-                    
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                } catch (error) {
-                    console.log('Ошибка запроса к OMDB:', error);
-                    continue;
-                }
-            }
-            
-            if (!data) {
-                try {
-                    const searchResponse = await fetch(
-                        `https://www.omdbapi.com/?s=${encodeURIComponent(searchTitle)}&y=${year}&apikey=${this.OMDB_API_KEY}`
-                    );
-                    const searchData = await searchResponse.json();
-                    
-                    if (searchData.Response === "True" && searchData.Search && searchData.Search.length > 0) {
-                        const firstResult = searchData.Search[0];
-                        const detailResponse = await fetch(
-                            `https://www.omdbapi.com/?i=${firstResult.imdbID}&apikey=${this.OMDB_API_KEY}`
-                        );
-                        data = await detailResponse.json();
-                    }
-                } catch (error) {
-                    console.log('Ошибка поиска в OMDB:', error);
-                }
-            }
-            
-            if (data && data.Response === "True") {
-                const translatedData = await this.translateMovieData(data);
-                
-                let detectedContentType = "movie";
-                if (data.Type === "series") {
-                    detectedContentType = "series";
-                } else if (data.Genre && (
-                    data.Genre.toLowerCase().includes("animation") || 
-                    data.Genre.toLowerCase().includes("family") ||
-                    contentType === "cartoon"
-                )) {
-                    detectedContentType = "cartoon";
-                }
-                
-                const finalContentType = contentType !== "movie" ? contentType : detectedContentType;
-                
-                const uniqueTags = this.getUniqueTags(translatedData.genre, finalContentType);
-                
-                const newFilm = {
-                    ...this.getTemplate(),
-                    id: Date.now(),
-                    title: translatedData.title,
-                    year: parseInt(data.Year) || year || new Date().getFullYear(),
-                    rating: parseFloat(data.imdbRating) || 7.0,
-                    genre: translatedData.genre,
-                    duration: data.Runtime !== "N/A" ? this.translateRuntime(data.Runtime) : "120 мин",
-                    country: translatedData.country,
-                    img: data.Poster !== "N/A" ? data.Poster : this.generatePlaceholder(translatedData.title),
-                    description: translatedData.description,
-                    director: translatedData.director,
-                    actors: translatedData.actors,
-                    contentType: finalContentType,
-                    seasons: data.totalSeasons ? parseInt(data.totalSeasons) : 1,
-                    episodes: 1,
-                    partnerLinks: {
-                        okko: `https://okko.tv/search/${encodeURIComponent(translatedData.title)}`,
-                        ivi: `https://www.ivi.ru/search/?q=${encodeURIComponent(translatedData.title)}`,
-                        wink: `https://wink.ru/search?query=${encodeURIComponent(translatedData.title)}`,
-                        kion: `https://kion.ru/search?query=${encodeURIComponent(translatedData.title)}`,
-                        premier: `https://premier.one/search?q=${encodeURIComponent(translatedData.title)}`,
-                        kinopoisk: `https://www.kinopoisk.ru/index.php?kp_query=${encodeURIComponent(translatedData.title)}`
-                    },
-                    reviews: [],
-                    userRatings: [],
-                    tags: uniqueTags
-                };
-                
-                this.films.unshift(newFilm);
-                this.saveFilms();
-                showAdminMessage(`✅ "${translatedData.title}" добавлен!`);
-                return newFilm;
-            } else {
-                return await this.alternativeSearch(movieTitle, year, contentType);
-            }
+            localStorage.setItem('vzorkino_custom_rows', JSON.stringify(this.customRows));
         } catch (error) {
-            console.error("Ошибка:", error);
-            showAdminMessage('❌ Ошибка сети', 'error');
-            return await this.alternativeSearch(movieTitle, year, contentType);
+            console.error('Error saving custom rows:', error);
         }
     }
     
-    async alternativeSearch(title, year, contentType) {
-        const newFilm = {
-            ...this.getTemplate(),
-            id: Date.now(),
-            title: title,
-            year: year || new Date().getFullYear(),
-            rating: 7.5,
-            genre: this.getGenreByContentType(contentType),
-            duration: contentType === "movie" ? "120 мин" : "24 мин",
-            country: "Россия",
-            img: this.generatePlaceholder(title),
-            description: `${title} - ${contentType === "movie" ? "фильм" : contentType === "series" ? "сериал" : "мультфильм"}`,
-            director: "Режиссер",
-            actors: "Актеры",
-            contentType: contentType,
-            partnerLinks: {
-                okko: `https://okko.tv/search/${encodeURIComponent(title)}`,
-                ivi: `https://www.ivi.ru/search/?q=${encodeURIComponent(title)}`,
-                wink: `https://wink.ru/search?query=${encodeURIComponent(title)}`,
-                kion: `https://kion.ru/search?query=${encodeURIComponent(title)}`,
-                premier: `https://premier.one/search?q=${encodeURIComponent(title)}`,
-                kinopoisk: `https://www.kinopoisk.ru/index.php?kp_query=${encodeURIComponent(title)}`
-            },
-            reviews: [],
-            userRatings: [],
-            tags: [this.getGenreByContentType(contentType)]
+    createCustomRow(rowId, name, pageType = 'all', maxRowItems = 20) {
+        this.customRows[rowId] = {
+            id: rowId,
+            name: name,
+            pageType: pageType,
+            maxRowItems: maxRowItems,
+            rowItems: [], // Фильмы, которые показываются в ряду (макс 20)
+            modalItems: [] // Все фильмы, которые показываются в модальном окне
         };
-        
-        this.films.unshift(newFilm);
-        this.saveFilms();
-        showAdminMessage(`✅ "${title}" добавлен через альтернативный поиск!`);
-        return newFilm;
+        this.saveCustomRows();
+        return this.customRows[rowId];
     }
     
-    getGenreByContentType(contentType) {
-        switch(contentType) {
-            case "series": return "Сериал";
-            case "cartoon": return "Мультфильм";
-            default: return "Фильм";
+    deleteCustomRow(rowId) {
+        if (this.customRows[rowId]) {
+            delete this.customRows[rowId];
+            this.saveCustomRows();
+            return true;
         }
+        return false;
     }
     
-    getUniqueTags(genre, contentType) {
-        const baseTags = [];
+    addToCustomRowModal(rowId, filmId) {
+        if (!this.customRows[rowId]) return false;
         
-        if (genre && genre !== "Фильм") {
-            baseTags.push(genre);
+        if (!this.customRows[rowId].modalItems.includes(filmId)) {
+            this.customRows[rowId].modalItems.push(filmId);
+            this.saveCustomRows();
+            return true;
+        }
+        return false;
+    }
+    
+    removeFromCustomRowModal(rowId, filmId) {
+        if (!this.customRows[rowId]) return false;
+        
+        this.customRows[rowId].modalItems = this.customRows[rowId].modalItems.filter(id => id !== filmId);
+        this.customRows[rowId].rowItems = this.customRows[rowId].rowItems.filter(id => id !== filmId);
+        this.saveCustomRows();
+        return true;
+    }
+    
+    addToCustomRowDisplay(rowId, filmId) {
+        if (!this.customRows[rowId]) return false;
+        
+        // Убедимся, что фильм есть в модальном окне
+        if (!this.customRows[rowId].modalItems.includes(filmId)) {
+            this.customRows[rowId].modalItems.push(filmId);
         }
         
-        return [...new Set(baseTags)];
-    }
-    
-    async translateMovieData(englishData) {
-        try {
-            const [title, description, director, actors] = await Promise.all([
-                this.translateToRussian(englishData.Title),
-                this.translateToRussian(englishData.Plot !== "N/A" ? englishData.Plot : `Фильм "${englishData.Title}"`),
-                this.translateToRussian(englishData.Director !== "N/A" ? englishData.Director : "Режиссер"),
-                this.translateToRussian(englishData.Actors !== "N/A" ? englishData.Actors : "Актеры")
-            ]);
-            
-            return {
-                title: title || englishData.Title,
-                genre: this.translateGenre(englishData.Genre),
-                country: this.translateCountry(englishData.Country),
-                description: description || englishData.Plot,
-                director: director || englishData.Director,
-                actors: actors || englishData.Actors
-            };
-        } catch (error) {
-            return {
-                title: englishData.Title,
-                genre: this.translateGenre(englishData.Genre),
-                country: this.translateCountry(englishData.Country),
-                description: englishData.Plot,
-                director: englishData.Director,
-                actors: englishData.Actors
-            };
+        // Добавляем в ряд, если есть место
+        if (!this.customRows[rowId].rowItems.includes(filmId) && 
+            this.customRows[rowId].rowItems.length < this.customRows[rowId].maxRowItems) {
+            this.customRows[rowId].rowItems.push(filmId);
+            this.saveCustomRows();
+            return true;
         }
+        return false;
     }
     
-    async translateToRussian(text) {
-        if (!text || text === "N/A") return text;
+    removeFromCustomRowDisplay(rowId, filmId) {
+        if (!this.customRows[rowId]) return false;
         
-        try {
-            const response = await fetch(
-                `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|ru`
-            );
-            const data = await response.json();
-            
-            if (data && data.responseData && data.responseData.translatedText) {
-                return data.responseData.translatedText;
+        this.customRows[rowId].rowItems = this.customRows[rowId].rowItems.filter(id => id !== filmId);
+        this.saveCustomRows();
+        return true;
+    }
+    
+    getCustomRow(rowId) {
+        return this.customRows[rowId] || null;
+    }
+    
+    getAllCustomRows() {
+        return this.customRows;
+    }
+    
+    getCustomRowsForPage(pageType) {
+        const rows = {};
+        Object.keys(this.customRows).forEach(rowId => {
+            if (this.customRows[rowId].pageType === pageType) {
+                rows[rowId] = this.customRows[rowId];
             }
-        } catch (error) {
-            console.log('Ошибка перевода на русский:', text);
-        }
-        
-        return text;
+        });
+        return rows;
     }
     
-    translateGenre(genres) {
-        if (!genres || genres === "N/A") return "Фильм";
+    getCustomRowFilms(rowId, type = 'row') {
+        if (!this.customRows[rowId]) return [];
         
-        const genreMap = {
-            'Action': 'Боевик', 
-            'Adventure': 'Приключения', 
-            'Animation': 'Мультфильм',
-            'Comedy': 'Комедия', 
-            'Crime': 'Криминал', 
-            'Documentary': 'Документальный',
-            'Drama': 'Драма', 
-            'Family': 'Семейный', 
-            'Fantasy': 'Фэнтези',
-            'History': 'Исторический', 
-            'Horror': 'Ужасы', 
-            'Music': 'Музыка',
-            'Mystery': 'Детектив', 
-            'Romance': 'Мелодрама', 
-            'Science Fiction': 'Фантастика',
-            'TV Movie': 'Телефильм', 
-            'Thriller': 'Триллер', 
-            'War': 'Военный',
-            'Western': 'Вестерн'
-        };
+        const filmIds = type === 'row' ? this.customRows[rowId].rowItems : this.customRows[rowId].modalItems;
         
-        const englishGenres = genres.split(',').map(g => g.trim());
-        const russianGenres = englishGenres.map(genre => genreMap[genre] || genre);
-        
-        return russianGenres[0];
-    }
-    
-    translateCountry(countries) {
-        if (!countries || countries === "N/A") return "США";
-        
-        const countryMap = {
-            'United States': 'США', 'USA': 'США', 'UK': 'Великобритания',
-            'United Kingdom': 'Великобритания', 'Canada': 'Канада', 'Australia': 'Австралия',
-            'Germany': 'Германия', 'France': 'Франция', 'Japan': 'Япония',
-            'South Korea': 'Южная Корея', 'China': 'Китай', 'Russia': 'Россия'
-        };
-        
-        const englishCountries = countries.split(',').map(c => c.trim());
-        const russianCountries = englishCountries.map(country => countryMap[country] || country);
-        
-        return russianCountries[0];
-    }
-    
-    translateRuntime(runtime) {
-        if (!runtime || runtime === "N/A") return "120 мин";
-        return runtime.replace('min', 'мин');
-    }
-    
-    generatePlaceholder(title) {
-        const cleanTitle = title.substring(0, 15).replace(/[^a-zA-Z0-9]/g, '');
-        return `https://via.placeholder.com/300x450/1a1a24/ffffff?text=${encodeURIComponent(cleanTitle || 'Poster')}`;
-    }
-    
-    async bulkAddFilms(filmList) {
-        const results = [];
-        for (const film of filmList) {
-            const result = await this.autoAddFilm(film.title, film.year, film.contentType);
-            results.push(result);
-            await new Promise(resolve => setTimeout(resolve, 1500));
-        }
-        return results;
+        return filmIds
+            .map(filmId => this.films.find(film => film.id == filmId))
+            .filter(film => film !== undefined);
     }
 }
