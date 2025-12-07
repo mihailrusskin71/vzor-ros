@@ -53,6 +53,10 @@ function createAdminPanel() {
             <div style="margin-bottom: 25px; padding: 15px; background: var(--bg-secondary); border-radius: 10px;">
                 <h4 style="margin: 0 0 10px 0; color: var(--text-primary);">📊 Статистика</h4>
                 <div id="statsInfo" style="color: var(--text-secondary); font-size: 14px;">Загрузка...</div>
+                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                    <button id="refreshStats" style="padding: 8px 15px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px;">🔄 Обновить</button>
+                    <button id="syncCustomRows" style="padding: 8px 15px; background: #8B5CF6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px;">🔄 Синхронизировать ряды</button>
+                </div>
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 25px;">
@@ -168,7 +172,7 @@ function createAdminPanel() {
 function setupAdminFunctions() {
     const ADMIN_PASSWORD = "dfd123";
     
-    document.getElementById('loginAdmin').addEventListener('click', () => {
+    document.getElementById('loginAdmin').addEventListener('click', async () => {
         const password = document.getElementById('adminPassword').value;
         
         if (password === ADMIN_PASSWORD) {
@@ -176,7 +180,7 @@ function setupAdminFunctions() {
             document.getElementById('adminContent').style.display = 'block';
             updateStats();
             renderFilmsList();
-            setupCustomRowsManager();
+            await setupCustomRowsManager();
             showAdminMessage('✅ Успешный вход в админку');
         } else {
             showAdminMessage('❌ Неверный пароль', 'error');
@@ -187,6 +191,24 @@ function setupAdminFunctions() {
     document.getElementById('adminPassword').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             document.getElementById('loginAdmin').click();
+        }
+    });
+    
+    document.getElementById('refreshStats').addEventListener('click', () => {
+        updateStats();
+        showAdminMessage('📊 Статистика обновлена');
+    });
+    
+    document.getElementById('syncCustomRows').addEventListener('click', async () => {
+        if (window.filmManager) {
+            showAdminMessage('🔄 Синхронизирую кастомные ряды...', 'info');
+            const rows = await window.filmManager.loadCustomRowsFromSupabase();
+            renderCustomRowsList();
+            showAdminMessage(`✅ Синхронизировано ${Object.keys(rows).length} рядов`);
+            
+            if (window.contentManager) {
+                window.contentManager.refreshAllSections();
+            }
         }
     });
     
@@ -331,9 +353,14 @@ function setupAdminFunctions() {
         const newRow = window.filmManager.createCustomRow(rowId, rowName, pageType, 20);
         
         if (newRow) {
-            showAdminMessage(`✅ Ряд "${rowName}" создан`);
+            showAdminMessage(`✅ Ряд "${rowName}" создан и сохранен в базу данных`);
             document.getElementById('newRowName').value = '';
-            renderCustomRowsList();
+            
+            // Обновляем список рядов
+            renderCustomRowsList().then(() => {
+                // Показываем управление для нового ряда
+                showCustomRowManagement(rowId);
+            });
         }
     });
     
@@ -386,11 +413,16 @@ function setupAdminFunctions() {
     });
 }
 
-function setupCustomRowsManager() {
+async function setupCustomRowsManager() {
+    // Загружаем ряды из базы данных
+    if (window.filmManager && typeof window.filmManager.loadCustomRowsFromSupabase === 'function') {
+        await window.filmManager.loadCustomRowsFromSupabase();
+    }
+    
     renderCustomRowsList();
 }
 
-function renderCustomRowsList() {
+async function renderCustomRowsList() {
     const container = document.getElementById('customRowsList');
     if (!container) return;
     
@@ -418,13 +450,19 @@ function renderCustomRowsList() {
             transition: all 0.3s ease;
         `;
         
+        // Считаем обложки в ряду
+        const filmsInRow = window.filmManager.getCustomRowFilms(rowId, 'row');
+        const filmsInModal = window.filmManager.getCustomRowFilms(rowId, 'modal');
+        const hasPosters = filmsInRow.filter(f => f && f.img && !f.img.includes('data:image/svg+xml')).length;
+        
         rowItem.innerHTML = `
-            <div>
+            <div style="flex: 1;">
                 <div style="font-weight: 600; color: var(--text-primary);">${row.name}</div>
                 <div style="font-size: 12px; color: var(--text-secondary);">
                     ${row.pageType === 'all' ? 'Главная' : row.pageType} • 
-                    ${row.rowItems.length} в ряду • 
-                    ${row.modalItems.length} в модальном окне
+                    ${filmsInRow.length} в ряду • 
+                    ${filmsInModal.length} в модальном окне
+                    ${hasPosters > 0 ? ` • 🖼️ ${hasPosters} с обложками` : ''}
                 </div>
             </div>
             <div style="display: flex; gap: 5px;">
@@ -443,10 +481,10 @@ function renderCustomRowsList() {
         
         rowItem.querySelector('.delete-custom-row-btn').addEventListener('click', (e) => {
             e.stopPropagation();
-            if (confirm(`Удалить ряд "${row.name}"?`)) {
+            if (confirm(`Удалить ряд "${row.name}"? Это действие также удалит ряд из базы данных.`)) {
                 const success = window.filmManager.deleteCustomRow(rowId);
                 if (success) {
-                    showAdminMessage(`✅ Ряд "${row.name}" удален`);
+                    showAdminMessage(`✅ Ряд "${row.name}" удален из базы данных`);
                     renderCustomRowsList();
                     if (window.contentManager) {
                         window.contentManager.refreshAllSections();
@@ -458,6 +496,17 @@ function renderCustomRowsList() {
         rowItem.addEventListener('click', () => {
             showCustomRowManagement(rowId);
         });
+        
+        // Анимация при наведении
+        rowItem.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateX(5px)';
+            this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+        });
+        
+        rowItem.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateX(0)';
+            this.style.boxShadow = 'none';
+        });
     });
 }
 
@@ -465,7 +514,7 @@ function showCustomRowManagement(rowId) {
     const row = window.filmManager.getCustomRow(rowId);
     if (!row) return;
     
-    document.getElementById('currentRowTitle').textContent = `Управление рядом: ${row.name}`;
+    document.getElementById('currentRowTitle').textContent = `Управление рядом: ${row.name} (${row.pageType === 'all' ? 'Главная' : row.pageType})`;
     document.getElementById('rowManagementContent').style.display = 'block';
     document.getElementById('rowManagementContent').dataset.currentRow = rowId;
     
@@ -479,7 +528,7 @@ function showCustomRowManagement(rowId) {
     window.filmManager.films.forEach(film => {
         const option = document.createElement('option');
         option.value = film.id;
-        option.textContent = `${film.title} (${film.year})`;
+        option.textContent = `${film.title} (${film.year}) • ${film.genre}`;
         modalSelect.appendChild(option);
     });
     
@@ -492,7 +541,7 @@ function showCustomRowManagement(rowId) {
         if (!row.rowItems.includes(film.id)) {
             const option = document.createElement('option');
             option.value = film.id;
-            option.textContent = `${film.title} (${film.year})`;
+            option.textContent = `${film.title} (${film.year}) • ${film.genre}`;
             rowSelect.appendChild(option);
         }
     });
@@ -518,13 +567,17 @@ function showCustomRowManagement(rowId) {
             `;
             
             const isInRow = row.rowItems.includes(film.id);
+            const hasPoster = film.img && !film.img.includes('data:image/svg+xml');
             
             filmItem.innerHTML = `
-                <div style="flex: 1;">
-                    <div style="font-weight: 600; color: var(--text-primary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${film.title}</div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; color: var(--text-primary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${film.title}
+                        ${hasPoster ? ' 🖼️' : ''}
+                    </div>
                     <div style="font-size: 10px; color: var(--text-secondary);">${film.year} • ${film.genre}</div>
                 </div>
-                <div style="display: flex; gap: 5px;">
+                <div style="display: flex; gap: 5px; align-items: center;">
                     ${isInRow ? '<span style="font-size: 10px; color: #10B981; font-weight: 600;">В ряду</span>' : ''}
                     <button class="remove-from-modal-btn" data-film-id="${film.id}" style="background: #EF4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;">Удалить</button>
                 </div>
@@ -540,7 +593,7 @@ function showCustomRowManagement(rowId) {
                 const filmId = parseInt(btn.dataset.filmId);
                 const success = window.filmManager.removeFromCustomRowModal(rowId, filmId);
                 if (success) {
-                    showAdminMessage('✅ Фильм удален из модального окна');
+                    showAdminMessage('✅ Фильм удален из модального окна и базы данных');
                     showCustomRowManagement(rowId);
                     if (window.contentManager) {
                         window.contentManager.refreshAllSections();
@@ -571,9 +624,14 @@ function showCustomRowManagement(rowId) {
                 border-left: 3px solid #10B981;
             `;
             
+            const hasPoster = film.img && !film.img.includes('data:image/svg+xml');
+            
             filmItem.innerHTML = `
-                <div style="flex: 1;">
-                    <div style="font-weight: 600; color: var(--text-primary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${film.title}</div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; color: var(--text-primary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${film.title}
+                        ${hasPoster ? ' 🖼️' : ''}
+                    </div>
                     <div style="font-size: 10px; color: var(--text-secondary);">${film.year} • ${film.genre}</div>
                 </div>
                 <button class="remove-from-row-display-btn" data-film-id="${film.id}" style="background: #EF4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;">Удалить</button>
@@ -589,7 +647,7 @@ function showCustomRowManagement(rowId) {
                 const filmId = parseInt(btn.dataset.filmId);
                 const success = window.filmManager.removeFromCustomRowDisplay(rowId, filmId);
                 if (success) {
-                    showAdminMessage('✅ Фильм удален из ряда');
+                    showAdminMessage('✅ Фильм удален из ряда и базы данных');
                     showCustomRowManagement(rowId);
                     if (window.contentManager) {
                         window.contentManager.refreshAllSections();
@@ -607,7 +665,17 @@ function updateStats() {
         const withPosters = window.filmManager.films.filter(f => !f.img.includes('placeholder')).length;
         const totalReviews = window.filmManager.films.reduce((sum, film) => sum + (film.reviews ? film.reviews.length : 0), 0);
         const totalRatings = window.filmManager.films.reduce((sum, film) => sum + (film.userRatings ? film.userRatings.length : 0), 0);
-        const customRowsCount = Object.keys(window.filmManager.getAllCustomRows()).length;
+        const customRows = window.filmManager.getAllCustomRows();
+        const customRowsCount = Object.keys(customRows).length;
+        
+        // Считаем фильмы в кастомных рядах
+        let totalFilmsInCustomRows = 0;
+        let totalFilmsInCustomModals = 0;
+        Object.keys(customRows).forEach(rowId => {
+            const row = customRows[rowId];
+            totalFilmsInCustomRows += row.rowItems.length;
+            totalFilmsInCustomModals += row.modalItems.length;
+        });
         
         const partnerStats = {};
         const contentStats = {};
@@ -625,11 +693,13 @@ function updateStats() {
             .join('<br>');
         
         statsEl.innerHTML = `
-            Всего: <strong>${totalFilms}</strong><br>
+            Всего фильмов: <strong>${totalFilms}</strong><br>
             С постерами: <strong>${withPosters}</strong><br>
             Всего отзывов: <strong>${totalReviews}</strong><br>
             Всего оценок: <strong>${totalRatings}</strong><br>
             Кастомные ряды: <strong>${customRowsCount}</strong><br>
+            Фильмы в рядах: <strong>${totalFilmsInCustomRows}</strong><br>
+            Фильмы в модальных окнах: <strong>${totalFilmsInCustomModals}</strong><br>
             <br>По типам:<br>${contentStatsText}
             <br>По партнерам:<br>${partnerStatsText}
         `;
@@ -665,12 +735,13 @@ function renderFilmsList() {
         const ratingCount = film.userRatings ? film.userRatings.length : 0;
         const partnerInfo = window.PARTNERS[film.partner] || window.PARTNERS.okko;
         const contentType = window.CONTENT_TYPES[film.contentType] || window.CONTENT_TYPES.movie;
+        const hasPoster = film.img && !film.img.includes('data:image/svg+xml');
         
         filmItem.innerHTML = `
             <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
-                <img src="${film.img}" alt="${film.title}" style="width: 40px; height: 60px; object-fit: cover; border-radius: 4px;">
+                <img src="${film.img}" alt="${film.title}" style="width: 40px; height: 60px; object-fit: cover; border-radius: 4px; ${!hasPoster ? 'filter: grayscale(1) opacity(0.7)' : ''}">
                 <div style="flex: 1;">
-                    <div style="font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${film.title}</div>
+                    <div style="font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${film.title}${!hasPoster ? ' (без обложки)' : ''}</div>
                     <div style="font-size: 12px; color: var(--text-secondary);">
                         ${film.year} • ${film.genre} • ⭐ ${film.rating}
                         ${reviewCount > 0 ? ` • 💬 ${reviewCount}` : ''}
@@ -711,11 +782,11 @@ function renderFilmsList() {
             e.stopPropagation();
             const filmId = btn.dataset.id;
             const film = window.filmManager.films.find(f => f.id == filmId);
-            if (film && confirm(`Удалить "${film.title}"?`)) {
+            if (film && confirm(`Удалить "${film.title}"? Это действие также удалит фильм из базы данных.`)) {
                 window.filmManager.deleteFilm(filmId);
                 renderFilmsList();
                 updateStats();
-                showAdminMessage('✅ Контент удален');
+                showAdminMessage('✅ Контент удален из базы данных');
             }
         });
     });
