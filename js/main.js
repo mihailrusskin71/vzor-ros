@@ -6,11 +6,13 @@ import { initModals, showMovieInfo, showAuthModal, updateUserProfile, showSaveNo
 import { initSearch } from './modules/search.js';
 import { initAdmin, showAdminPanel } from './modules/admin.js';
 import { showAdminMessage, showRatingNotification, showReviewNotification, setupSecretAdmin } from './modules/utils.js';
-import { PARTNERS, CONTENT_TYPES } from './modules/constants.js';
+import { PARTNERS, CONTENT_TYPES, NEW_RELEASES_CONFIG, ROW_TYPES } from './modules/constants.js';
 
 // Сделать константы глобальными для обратной совместимости
 window.PARTNERS = PARTNERS;
 window.CONTENT_TYPES = CONTENT_TYPES;
+window.NEW_RELEASES_CONFIG = NEW_RELEASES_CONFIG;
+window.ROW_TYPES = ROW_TYPES;
 
 // Глобальные переменные
 window.filmManager = null;
@@ -114,6 +116,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Initialize managers
         window.filmManager = new FilmManager();
         window.userManager = new UserManager();
+        
+        // СРАЗУ создаем ContentManager для мгновенного показа
         window.contentManager = new ContentManager();
         
         // Initialize modules
@@ -130,3 +134,22 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('Error initializing Vzorkino:', error);
     }
 });
+
+// Добавьте в конец файла main.js перед последней скобкой
+// Функция для открытия модального окна кастомного ряда
+window.showCustomRowModal = function(rowId) {
+    if (!window.filmManager) return;
+    
+    const row = window.filmManager.getCustomRow(rowId);
+    if (!row) return;
+    
+    // Проверяем, существует ли функция showCustomRowModal в modals.js
+    if (typeof showCustomRowModal === 'function') {
+        showCustomRowModal(rowId, row.name);
+    } else {
+        // Fallback: открываем встроенную функцию
+        if (window.contentManager && typeof window.contentManager.showCustomRowModal === 'function') {
+            window.contentManager.showCustomRowModal(rowId);
+        }
+    }
+};
