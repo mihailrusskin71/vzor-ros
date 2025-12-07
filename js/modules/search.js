@@ -68,65 +68,115 @@ export function performSearch() {
     );
     
     if (window.contentManager.currentPage === 'all') {
-        const newReleasesContainer = document.getElementById('new-releases');
-        if (newReleasesContainer) {
-            newReleasesContainer.innerHTML = '';
+        // Создаем контейнер для результатов поиска
+        let resultsContainer = document.getElementById('search-results-container');
+        
+        if (!resultsContainer) {
+            resultsContainer = document.createElement('div');
+            resultsContainer.id = 'search-results-container';
+            resultsContainer.className = 'search-results-section';
             
-            if (results.length === 0) {
-                newReleasesContainer.innerHTML = '<p class="no-content">По вашему запросу ничего не найдено</p>';
-            } else {
-                results.forEach(movie => {
-                    const card = window.contentManager.createMovieCard(movie);
-                    newReleasesContainer.appendChild(card);
-                });
+            const homePage = document.getElementById('home-page');
+            if (homePage) {
+                homePage.insertBefore(resultsContainer, homePage.firstChild);
             }
+        }
+        
+        resultsContainer.innerHTML = '';
+        
+        if (results.length === 0) {
+            resultsContainer.innerHTML = `
+                <h2 style="color: var(--text-primary); margin-bottom: 20px;">Результаты поиска: "${query}" (0)</h2>
+                <p class="no-content">По вашему запросу ничего не найдено</p>
+            `;
+        } else {
+            resultsContainer.innerHTML = `
+                <h2 style="color: var(--text-primary); margin-bottom: 20px;">Результаты поиска: "${query}" (${results.length})</h2>
+                <div class="catalog-grid" id="search-results-grid"></div>
+            `;
+            
+            const grid = document.getElementById('search-results-grid');
+            results.forEach(movie => {
+                const card = window.contentManager.createMovieCard(movie);
+                grid.appendChild(card);
+            });
         }
         
         // Скрываем другие секции при поиске
-        document.querySelectorAll('.top-section, .partners-section, .info-section').forEach(section => {
+        document.querySelectorAll('.custom-row-section, .partners-section, .info-section').forEach(section => {
             section.style.display = 'none';
         });
         
-        // Показываем заголовок результатов поиска
-        const searchTitle = document.createElement('h2');
-        searchTitle.textContent = `Результаты поиска: "${query}"`;
-        searchTitle.style.marginBottom = '20px';
-        searchTitle.style.color = 'var(--text-primary)';
+        // Показываем контейнер результатов
+        resultsContainer.style.display = 'block';
         
-        const newReleasesSection = document.querySelector('.new-releases-section');
-        if (newReleasesSection) {
-            const existingTitle = newReleasesSection.querySelector('h2');
-            if (existingTitle) {
-                existingTitle.textContent = `Результаты поиска: "${query}" (${results.length})`;
-            }
-        }
     } else {
-        const contentNewReleases = document.getElementById('content-new-releases');
-        if (contentNewReleases) {
-            const filteredResults = results.filter(movie => movie.contentType === window.contentManager.currentPage);
-            contentNewReleases.innerHTML = '';
+        // Создаем контейнер для результатов поиска на странице контента
+        let resultsContainer = document.getElementById('search-results-container');
+        
+        if (!resultsContainer) {
+            resultsContainer = document.createElement('div');
+            resultsContainer.id = 'search-results-container';
+            resultsContainer.className = 'search-results-section';
             
-            if (filteredResults.length === 0) {
-                contentNewReleases.innerHTML = '<p class="no-content">По вашему запросу ничего не найдено</p>';
-            } else {
-                filteredResults.forEach(movie => {
-                    const card = window.contentManager.createMovieCard(movie);
-                    contentNewReleases.appendChild(card);
-                });
-            }
-            
-            // Обновляем заголовок
-            const contentTitle = document.querySelector('.content-new-releases h3');
-            if (contentTitle) {
-                contentTitle.textContent = `Результаты поиска: "${query}" (${filteredResults.length})`;
+            const contentPages = document.getElementById('content-pages');
+            if (contentPages) {
+                const contentHeader = contentPages.querySelector('.content-header');
+                if (contentHeader) {
+                    contentHeader.parentNode.insertBefore(resultsContainer, contentHeader.nextSibling);
+                } else {
+                    contentPages.insertBefore(resultsContainer, contentPages.firstChild);
+                }
             }
         }
         
-        // Скрываем топ контент при поиске
-        const topContentSection = document.querySelector('.top-section');
-        if (topContentSection) {
-            topContentSection.style.display = 'none';
+        const filteredResults = results.filter(movie => movie.contentType === window.contentManager.currentPage);
+        resultsContainer.innerHTML = '';
+        
+        if (filteredResults.length === 0) {
+            resultsContainer.innerHTML = `
+                <h3 style="color: var(--text-primary); margin-bottom: 20px;">Результаты поиска: "${query}" (0)</h3>
+                <p class="no-content">По вашему запросу ничего не найдено</p>
+            `;
+        } else {
+            resultsContainer.innerHTML = `
+                <h3 style="color: var(--text-primary); margin-bottom: 20px;">Результаты поиска: "${query}" (${filteredResults.length})</h3>
+                <div class="catalog-grid" id="search-results-grid"></div>
+            `;
+            
+            const grid = document.getElementById('search-results-grid');
+            filteredResults.forEach(movie => {
+                const card = window.contentManager.createMovieCard(movie);
+                grid.appendChild(card);
+            });
         }
+        
+        // Скрываем кастомные ряды при поиске
+        document.querySelectorAll('.custom-row-section').forEach(section => {
+            section.style.display = 'none';
+        });
+        
+        // Показываем контейнер результатов
+        resultsContainer.style.display = 'block';
+    }
+}
+
+// Функция очистки результатов поиска
+export function clearSearchResults() {
+    const resultsContainer = document.getElementById('search-results-container');
+    if (resultsContainer) {
+        resultsContainer.style.display = 'none';
+    }
+    
+    // Показываем все секции
+    document.querySelectorAll('.custom-row-section, .partners-section, .info-section').forEach(section => {
+        section.style.display = 'block';
+    });
+    
+    // Очищаем поле поиска
+    const searchInput = document.getElementById('search');
+    if (searchInput) {
+        searchInput.value = '';
     }
 }
 
