@@ -27,7 +27,7 @@ function createMovieInfoModal() {
         display: none;
         justify-content: center;
         align-items: center;
-        z-index: 10001;
+        z-index: 10011;
         padding: 20px;
     `;
     
@@ -64,6 +64,13 @@ function createMovieInfoModal() {
 export function showMovieInfo(movie) {
     const modal = document.getElementById('movieInfoModal');
     const content = document.getElementById('movieInfoContent');
+    
+    // Закрываем все другие модальные окна кастомных рядов
+    document.querySelectorAll('.custom-row-modal').forEach(customModal => {
+        if (customModal.style.display === 'flex') {
+            customModal.style.display = 'none';
+        }
+    });
     
     window.filmManager.currentMovieId = movie.id;
     
@@ -119,9 +126,20 @@ export function showMovieInfo(movie) {
                 
                 <div style="display: flex; gap: 20px; margin-bottom: 20px; color: var(--text-secondary); font-size: 16px; flex-wrap: wrap;">
                     <span>${movie.year}${seasonInfo}</span>
-                    <span>⭐ ${movie.rating}/10</span>
+                    <span style="display: flex; align-items: center; gap: 4px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+                        </svg>
+                        ${movie.rating}/10
+                    </span>
                     <span>${movie.genre}</span>
-                    <span>⏱️ ${movie.duration}</span>
+                    <span style="display: flex; align-items: center; gap: 4px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        ${movie.duration}
+                    </span>
                 </div>
                 
                 <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 25px; font-size: 15px;">${movie.description}</p>
@@ -129,14 +147,26 @@ export function showMovieInfo(movie) {
                 <button onclick="window.open('${movie.partnerLinks[displayPartner]}', '_blank')" 
                         style="background: ${partnerInfo.color}; color: white; border: none; padding: 14px 28px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 16px; transition: all 0.3s ease; display: flex; align-items: center; gap: 8px;"
                         id="watchBtn">
-                    ▶ Смотреть на ${partnerInfo.name}
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5,3 19,12 5,21"></polygon>
+                    </svg>
+                    Смотреть на ${partnerInfo.name}
                 </button>
             </div>
         </div>
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 35px;">
+        <div style="display: grid; grid-template-columns: 1fr; gap: 30px; margin-bottom: 35px;">
             <div>
-                <h4 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 18px;">📝 Информация</h4>
+                <h4 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14,2 14,8 20,8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10,9 9,9 8,9"></polyline>
+                    </svg>
+                    Информация
+                </h4>
                 <div style="color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
                     <p><strong>Тип:</strong> ${contentType.name}</p>
                     <p><strong>Режиссер:</strong> ${movie.director}</p>
@@ -148,18 +178,22 @@ export function showMovieInfo(movie) {
                     ${movie.tags && movie.tags.length > 0 ? `<p><strong>Теги:</strong> ${movie.tags.join(', ')}</p>` : ''}
                 </div>
             </div>
-            <div>
-                <h4 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 18px;">🎬 Сюжет</h4>
-                <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.6;">${movie.description}</p>
-            </div>
         </div>
         
         <div style="background: var(--bg-secondary); padding: 30px; border-radius: 15px; margin-top: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
-                <h4 style="margin: 0; color: var(--text-primary); font-size: 20px;">💫 Ваша оценка</h4>
+                <h4 style="margin: 0; color: var(--text-primary); font-size: 20px; display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+                    </svg>
+                    Ваша оценка
+                </h4>
                 <button onclick="showReviewsModalForCurrentMovie()" 
                         style="background: rgba(255,255,255,0.1); color: var(--text-primary); border: 1px solid var(--border); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.3s ease; display: flex; align-items: center; gap: 8px;">
-                    💬 Отзывы (${reviewCount})
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    Отзывы (${reviewCount})
                 </button>
             </div>
             
@@ -187,13 +221,18 @@ export function showMovieInfo(movie) {
                 
                 ${userRating > 0 ? `
                     <div style="text-align: center; margin-top: 10px;">
-                        <small style="color: var(--text-secondary);">⭐ Вы уже оценили этот ${contentType.name.toLowerCase()}</small>
+                        <small style="color: var(--text-secondary);">Вы уже оценили этот ${contentType.name.toLowerCase()}</small>
                     </div>
                 ` : ''}
             </div>
             
             <div>
-                <h5 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 16px;">✍️ Написать отзыв</h5>
+                <h5 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 8h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2v4l-4-4H9a1.994 1.994 0 0 1-1.414-.586m0 0L11 14h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2v4l.586-.586z"/>
+                    </svg>
+                    Написать отзыв
+                </h5>
                 <textarea id="reviewText" 
                           placeholder="Поделитесь вашими впечатлениями..." 
                           style="width: 100%; padding: 15px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; color: white; resize: vertical; min-height: 100px; font-size: 14px; line-height: 1.5; transition: all 0.3s ease;"></textarea>
@@ -201,17 +240,21 @@ export function showMovieInfo(movie) {
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; gap: 15px;">
                     <select id="reviewRating" 
                             style="padding: 10px 15px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; color: white; font-size: 14px; flex: 1; transition: all 0.3s ease;">
-                        <option value="5">⭐️⭐️⭐️⭐️⭐️ Отлично</option>
-                        <option value="4">⭐️⭐️⭐️⭐️ Хорошо</option>
-                        <option value="3">⭐️⭐️⭐️ Средне</option>
-                        <option value="2">⭐️⭐️ Плохо</option>
-                        <option value="1">⭐️ Ужасно</option>
+                        <option value="5">Отлично</option>
+                        <option value="4">Хорошо</option>
+                        <option value="3">Средне</option>
+                        <option value="2">Плохо</option>
+                        <option value="1">Ужасно</option>
                     </select>
                     
                     <button onclick="submitReview()" 
-                            style="padding: 12px 24px; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.3s ease; white-space: nowrap;"
+                            style="padding: 12px 24px; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.3s ease; white-space: nowrap; display: flex; align-items: center; gap: 8px;"
                             id="submitReviewBtn">
-                        📤 Опубликовать отзыв
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22,2 15,22 11,13 2,9"></polygon>
+                        </svg>
+                        Опубликовать отзыв
                     </button>
                 </div>
             </div>
@@ -428,7 +471,7 @@ function createAuthModal() {
         display: none;
         justify-content: center;
         align-items: center;
-        z-index: 10005;
+        z-index: 10013; /* Выше окна фильма и отзывов */
         padding: 20px;
     `;
     
@@ -636,13 +679,24 @@ function createUserProfile() {
                 <div id="profileEmail" style="font-size: 12px; color: var(--text-secondary);"></div>
             </div>
             <button id="savedMoviesBtn" style="width: 100%; padding: 12px; background: var(--bg-secondary); color: var(--text-primary); border: none; border-radius: 6px; cursor: pointer; margin-bottom: 8px; text-align: left; display: flex; align-items: center; gap: 10px; font-size: 14px; transition: all 0.3s ease;">
-                <span style="font-size: 16px;">💾</span> Сохраненные фильмы
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                </svg>
+                Сохраненные фильмы
             </button>
             <button id="myReviewsBtn" style="width: 100%; padding: 12px; background: var(--bg-secondary); color: var(--text-primary); border: none; border-radius: 6px; cursor: pointer; margin-bottom: 8px; text-align: left; display: flex; align-items: center; gap: 10px; font-size: 14px; transition: all 0.3s ease;">
-                <span style="font-size: 16px;">💬</span> Мои отзывы
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Мои отзывы
             </button>
             <button id="logoutBtn" style="width: 100%; padding: 12px; background: var(--bg-secondary); color: var(--text-primary); border: none; border-radius: 6px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 10px; font-size: 14px; transition: all 0.3s ease;">
-                <span style="font-size: 16px;">🚪</span> Выйти
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16,17 21,12 16,7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Выйти
             </button>
         </div>
     `;
@@ -836,7 +890,12 @@ export function showSavedMovies() {
         savedModal.innerHTML = `
             <div style="background: var(--bg-modal); border-radius: 15px; padding: 30px; max-width: 900px; width: 100%; max-height: 80vh; overflow-y: auto; position: relative;">
                 <button id="closeSavedModal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">×</button>
-                <h3 style="margin: 0 0 20px 0; color: var(--text-primary);">💾 Сохраненные фильмы</h3>
+                <h3 style="margin: 0 0 20px 0; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    Сохраненные фильмы
+                </h3>
                 <div id="savedMoviesContent" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px;"></div>
                 ${savedMovies.length === 0 ? '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Нет сохраненных фильмов</p>' : ''}
             </div>
@@ -955,7 +1014,12 @@ export function showMyReviews() {
         reviewsModal.innerHTML = `
             <div style="background: var(--bg-modal); border-radius: 15px; padding: 30px; max-width: 700px; width: 100%; max-height: 80vh; overflow-y: auto; position: relative;">
                 <button id="closeMyReviewsModal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">×</button>
-                <h3 style="margin: 0 0 20px 0; color: var(--text-primary);">💬 Мои отзывы</h3>
+                <h3 style="margin: 0 0 20px 0; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    Мои отзывы
+                </h3>
                 <div id="myReviewsContent"></div>
                 ${userReviews.length === 0 ? '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Вы еще не оставляли отзывы</p>' : ''}
             </div>
@@ -1042,7 +1106,7 @@ function createEditMovieModal() {
         display: none;
         justify-content: center;
         align-items: center;
-        z-index: 10003;
+        z-index: 10014;
         padding: 20px;
     `;
     
@@ -1256,8 +1320,21 @@ function saveFilmChanges() {
         }
     };
     
-    if (window.filmManager.updateFilm(filmId, updatedData)) {
-        showAdminMessage('✅ Контент успешно обновлен!');
+    // Обновляем локально
+    const filmIndex = window.filmManager.films.findIndex(film => film.id == filmId);
+    if (filmIndex !== -1) {
+        window.filmManager.films[filmIndex] = { ...window.filmManager.films[filmIndex], ...updatedData };
+        localStorage.setItem('vzorkino_films_cache', JSON.stringify(window.filmManager.films));
+        
+        // Обновляем в Supabase
+        window.filmManager.updateFilmInSupabase(filmId, updatedData).then(success => {
+            if (success) {
+                showAdminMessage('✅ Контент успешно обновлен в базе данных!');
+            } else {
+                showAdminMessage('⚠️ Контент обновлен локально, но произошла ошибка при синхронизации с базой', 'error');
+            }
+        });
+        
         if (window.contentManager) {
             window.contentManager.refreshAllSections();
         }
@@ -1266,7 +1343,7 @@ function saveFilmChanges() {
         }
         document.getElementById('editMovieModal').style.display = 'none';
     } else {
-        showAdminMessage('❌ Ошибка при обновлении', 'error');
+        showAdminMessage('❌ Ошибка при обновлении: фильм не найден', 'error');
     }
 }
 
@@ -1284,14 +1361,19 @@ function createReviewsModal() {
         display: none;
         justify-content: center;
         align-items: center;
-        z-index: 10002;
+        z-index: 10012; /* Выше окна фильма (10001) */
         padding: 20px;
     `;
     
     modal.innerHTML = `
         <div style="background: var(--bg-modal); border-radius: 15px; padding: 30px; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto; position: relative;">
             <button id="closeReviewsModal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">×</button>
-            <h3 style="margin: 0 0 20px 0; color: var(--text-primary);">💬 Отзывы</h3>
+            <h3 style="margin: 0 0 20px 0; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Отзывы
+            </h3>
             <div id="reviewsContent"></div>
         </div>
     `;
@@ -1824,4 +1906,76 @@ export function removeContentFilter(filterType) {
 // Helper function
 function hasPartnerLink(movie, partner) {
     return movie.partnerLinks && movie.partnerLinks[partner] && movie.partnerLinks[partner].trim() !== '';
+}
+
+// Добавьте эту функцию в конец файла modals.js
+export function showCustomRowModal(rowId, rowName) {
+    const row = window.filmManager.getCustomRow(rowId);
+    if (!row) return;
+    
+    const films = window.filmManager.getCustomRowFilms(rowId, 'modal');
+    
+    let modal = document.getElementById(`custom-row-modal-${rowId}`);
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = `custom-row-modal-${rowId}`;
+        modal.className = 'custom-row-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10009; /* Выше обычных модальных окон */
+            padding: 20px;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: var(--bg-modal); border-radius: 20px; padding: 40px; max-width: 1400px; width: 100%; max-height: 95vh; overflow-y: auto; position: relative; box-shadow: 0 25px 80px rgba(0,0,0,0.9); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(20px);">
+                <button class="close-custom-modal" style="position: absolute; top: 25px; right: 25px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: var(--text-secondary); font-size: 28px; cursor: pointer; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.3s ease;">×</button>
+                <h2 style="margin: 0 0 30px 0; color: var(--text-primary); text-align: center; font-size: 32px; font-weight: 700;">${rowName || row.name}</h2>
+                <div class="custom-modal-content" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 25px; padding: 15px;"></div>
+                ${films.length === 0 ? '<p style="text-align: center; color: var(--text-secondary); padding: 60px; font-size: 18px;">В этой коллекции пока нет контента</p>' : ''}
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const closeBtn = modal.querySelector('.close-custom-modal');
+        closeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        
+        closeBtn.addEventListener('mouseenter', function() {
+            this.style.background = 'rgba(255,255,255,0.2)';
+            this.style.color = 'white';
+            this.style.transform = 'rotate(90deg)';
+        });
+        
+        closeBtn.addEventListener('mouseleave', function() {
+            this.style.background = 'rgba(255,255,255,0.1)';
+            this.style.color = 'var(--text-secondary)';
+            this.style.transform = 'rotate(0deg)';
+        });
+        
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
+    
+    const content = modal.querySelector('.custom-modal-content');
+    content.innerHTML = '';
+    
+    films.forEach(movie => {
+        const card = window.contentManager.createCustomRowMovieCard(movie);
+        content.appendChild(card);
+    });
+    
+    modal.style.display = 'flex';
 }
