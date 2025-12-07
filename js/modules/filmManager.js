@@ -10,13 +10,22 @@ export class FilmManager {
         this.POISK_KINO_API_KEY = "QHABHFK-P68MM3H-GQFQB7D-1VRGXYQ";
         this.currentMovieId = null;
         this.films = [];
-        this.customRows = this.loadCustomRows();
+        this.customRows = {};
         
         this.init();
     }
     
     async init() {
+        // 1. Сначала загружаем фильмы
         await this.loadFilmsWithCache();
+        
+        // 2. Затем загружаем кастомные ряды ИЗ БАЗЫ ДАННЫХ
+        await this.loadCustomRowsFromSupabase();
+        
+        // 3. Если в базе нет рядов, пробуем локальные как fallback
+        if (Object.keys(this.customRows).length === 0) {
+            this.customRows = this.loadCustomRows();
+        }
     }
     
     async loadFilmsWithCache() {
@@ -85,6 +94,340 @@ export class FilmManager {
         }
     }
     
+    // ===== МЕТОДЫ ДЛЯ КАСТОМНЫХ РЯДОВ =====
+    
+    async loadCustomRowsFromSupabase() {
+        try {
+            console.log('🔄 Загружаем кастомные ряды из Supabase...');
+            
+            const response = await fetch(`${this.SUPABASE_URL}/rest/v1/custom_rows?select=*&order=created_at.desc`, {
+                headers: {
+                    'apikey': this.SUPABASE_KEY,
+                    'Authorization': `Bearer ${this.SUPABASE_KEY}`
+                }
+            });
+            
+            if (response.ok) {
+                const rows = await response.json();
+                this.customRows = {};
+                
+                rows.forEach(row => {
+                    this.customRows[row.id] = {
+                        id: row.id,
+                        name: row.name,
+                        pageType: row.page_type || 'all',
+                        maxRowItems: row.max_row_items || 20,
+                        rowItems: row.row_items || [],
+                        modalItems: row.modal_items || [],
+                        isGlobal: row.is_global || true,
+                        userId: row.user_id,
+                        createdAt: row.created_at,
+                        updatedAt: row.updated_at
+                    };
+                });
+                
+                console.log(`✅ Загружено ${rows.length} кастомных рядов из Supabase`);
+                
+                // Сохраняем локальную копию для offline работы
+                this.saveCustomRowsToLocal();
+                
+                return this.customRows;
+            }
+        } catch (error) {
+            console.error('❌ Ошибка загрузки кастомных рядов из Supabase:', error);
+            // Fallback на локальное хранилище
+            return this.loadCustomRows();
+        }
+    }
+    
+    loadCustomRows() {
+        try {
+            const saved = localStorage.getItem('vzorkino_custom_rows');
+            return saved ? JSON.parse(saved) : {};
+        } catch (error) {
+            console.error('Error loading custom rows:', error);
+            return {};
+        }
+    }
+    
+    saveCustomRowsToLocal() {
+        try {
+            localStorage.setItem('vzorkino_custom_rows', JSON.stringify(this.customRows));
+        } catch (error) {
+            console.error('Error saving custom rows:', error);
+        }
+    }
+    
+    async saveCustomRowToSupabase(rowData) {
+        try {
+            console.log('💾 Сохраняем ряд в Supabase:', rowData.name);
+            
+            const response = await fetch(`${this.SUPABASE_URL}/rest/v1/custom_rows`, {
+                method: 'POST',
+                headers: {
+                    'apikey': this.SUPABASE_KEY,
+                    'Authorization': `Bearer ${this.SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify({
+                    id: rowData.id,
+                    name: rowData.name,
+                    page_type: rowData.pageType,
+                    max_row_items: rowData.maxRowItems,
+                    row_items: rowData.rowItems,
+                    modal_items: rowData.modalItems,
+                    is_global: rowData.isGlobal !== undefined ? rowData.isGlobal : true,
+                    user_id: window.userManager?.currentUser?.id || 'admin'
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Ряд сохранен в Supabase:', result[0]);
+                return true;
+            } else {
+                const errorText = await response.text();
+                console.error('❌ Ошибка Supabase при сохранении ряда:', errorText);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Ошибка сохранения ряда в Supabase:', error);
+            return false;
+        }
+    }
+    
+    async updateCustomRowInSupabase(rowId, updates) {
+        try {
+            const supabaseUpdates = {};
+            
+            // Конвертируем наши поля в формат Supabase
+            if (updates.rowItems !== undefined) supabaseUpdates.row_items = updates.rowItems;
+            if (updates.modalItems !== undefined) supabaseUpdates.modal_items = updates.modalItems;
+            if (updates.name !== undefined) supabaseUpdates.name = updates.name;
+            if (updates.pageType !== undefined) supabaseUpdates.page_type = updates.pageType;
+            if (updates.maxRowItems !== undefined) supabaseUpdates.max_row_items = updates.maxRowItems;
+            
+            supabaseUpdates.updated_at = new Date().toISOString();
+            
+            const response = await fetch(`${this.SUPABASE_URL}/rest/v1/custom_rows?id=eq.${rowId}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': this.SUPABASE_KEY,
+                    'Authorization': `Bearer ${this.SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify(supabaseUpdates)
+            });
+            
+            if (response.ok) {
+                console.log('✅ Ряд обновлен в Supabase');
+                return true;
+            } else {
+                const errorText = await response.text();
+                console.error('❌ Ошибка обновления ряда в Supabase:', errorText);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Ошибка обновления ряда в Supabase:', error);
+            return false;
+        }
+    }
+    
+    async deleteCustomRowFromSupabase(rowId) {
+        try {
+            const response = await fetch(`${this.SUPABASE_URL}/rest/v1/custom_rows?id=eq.${rowId}`, {
+                method: 'DELETE',
+                headers: {
+                    'apikey': this.SUPABASE_KEY,
+                    'Authorization': `Bearer ${this.SUPABASE_KEY}`
+                }
+            });
+            
+            if (response.ok) {
+                console.log('✅ Ряд удален из Supabase');
+                return true;
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+        } catch (error) {
+            console.error('❌ Ошибка удаления ряда из Supabase:', error);
+            return false;
+        }
+    }
+    
+    createCustomRow(rowId, name, pageType = 'all', maxRowItems = 20) {
+        const newRow = {
+            id: rowId,
+            name: name,
+            pageType: pageType,
+            maxRowItems: maxRowItems,
+            rowItems: [], // Фильмы, которые показываются в ряду (макс 20)
+            modalItems: [], // Все фильмы, которые показываются в модальном окне
+            isGlobal: true
+        };
+        
+        // Сохраняем локально
+        this.customRows[rowId] = newRow;
+        this.saveCustomRowsToLocal();
+        
+        // Сохраняем в базу данных (асинхронно)
+        this.saveCustomRowToSupabase(newRow).then(success => {
+            if (success) {
+                console.log('✅ Ряд успешно сохранен в базу данных');
+            } else {
+                console.warn('⚠️ Ряд сохранен только локально');
+            }
+        });
+        
+        return newRow;
+    }
+    
+    deleteCustomRow(rowId) {
+        if (this.customRows[rowId]) {
+            // Удаляем из базы данных (асинхронно)
+            this.deleteCustomRowFromSupabase(rowId).then(success => {
+                if (success) {
+                    console.log('✅ Ряд удален из базы данных');
+                }
+            });
+            
+            // Удаляем локально
+            delete this.customRows[rowId];
+            this.saveCustomRowsToLocal();
+            
+            return true;
+        }
+        return false;
+    }
+    
+    addToCustomRowModal(rowId, filmId) {
+        if (!this.customRows[rowId]) return false;
+        
+        if (!this.customRows[rowId].modalItems.includes(filmId)) {
+            this.customRows[rowId].modalItems.push(filmId);
+            
+            // Обновляем локально
+            this.saveCustomRowsToLocal();
+            
+            // Синхронизируем с базой (асинхронно)
+            this.updateCustomRowInSupabase(rowId, {
+                modalItems: this.customRows[rowId].modalItems
+            }).then(success => {
+                if (success) {
+                    console.log('✅ Модальное окно обновлено в базе данных');
+                }
+            });
+            
+            return true;
+        }
+        return false;
+    }
+    
+    removeFromCustomRowModal(rowId, filmId) {
+        if (!this.customRows[rowId]) return false;
+        
+        this.customRows[rowId].modalItems = this.customRows[rowId].modalItems.filter(id => id !== filmId);
+        this.customRows[rowId].rowItems = this.customRows[rowId].rowItems.filter(id => id !== filmId);
+        
+        // Обновляем локально
+        this.saveCustomRowsToLocal();
+        
+        // Синхронизируем с базой (асинхронно)
+        this.updateCustomRowInSupabase(rowId, {
+            modalItems: this.customRows[rowId].modalItems,
+            rowItems: this.customRows[rowId].rowItems
+        }).then(success => {
+            if (success) {
+                console.log('✅ Фильм удален из ряда в базе данных');
+            }
+        });
+        
+        return true;
+    }
+    
+    addToCustomRowDisplay(rowId, filmId) {
+        if (!this.customRows[rowId]) return false;
+        
+        // Убедимся, что фильм есть в модальном окне
+        if (!this.customRows[rowId].modalItems.includes(filmId)) {
+            this.customRows[rowId].modalItems.push(filmId);
+        }
+        
+        // Добавляем в ряд, если есть место
+        if (!this.customRows[rowId].rowItems.includes(filmId) && 
+            this.customRows[rowId].rowItems.length < this.customRows[rowId].maxRowItems) {
+            this.customRows[rowId].rowItems.push(filmId);
+            
+            // Обновляем локально
+            this.saveCustomRowsToLocal();
+            
+            // Синхронизируем с базой (асинхронно)
+            this.updateCustomRowInSupabase(rowId, {
+                modalItems: this.customRows[rowId].modalItems,
+                rowItems: this.customRows[rowId].rowItems
+            }).then(success => {
+                if (success) {
+                    console.log('✅ Фильм добавлен в ряд в базе данных');
+                }
+            });
+            
+            return true;
+        }
+        return false;
+    }
+    
+    removeFromCustomRowDisplay(rowId, filmId) {
+        if (!this.customRows[rowId]) return false;
+        
+        this.customRows[rowId].rowItems = this.customRows[rowId].rowItems.filter(id => id !== filmId);
+        
+        // Обновляем локально
+        this.saveCustomRowsToLocal();
+        
+        // Синхронизируем с базой (асинхронно)
+        this.updateCustomRowInSupabase(rowId, {
+            rowItems: this.customRows[rowId].rowItems
+        }).then(success => {
+            if (success) {
+                console.log('✅ Фильм удален из ряда в базе данных');
+            }
+        });
+        
+        return true;
+    }
+    
+    getCustomRow(rowId) {
+        return this.customRows[rowId] || null;
+    }
+    
+    getAllCustomRows() {
+        return this.customRows;
+    }
+    
+    getCustomRowsForPage(pageType) {
+        const rows = {};
+        Object.keys(this.customRows).forEach(rowId => {
+            if (this.customRows[rowId].pageType === pageType) {
+                rows[rowId] = this.customRows[rowId];
+            }
+        });
+        return rows;
+    }
+    
+    getCustomRowFilms(rowId, type = 'row') {
+        if (!this.customRows[rowId]) return [];
+        
+        const filmIds = type === 'row' ? this.customRows[rowId].rowItems : this.customRows[rowId].modalItems;
+        
+        return filmIds
+            .map(filmId => this.films.find(film => film.id == filmId))
+            .filter(film => film !== undefined);
+    }
+    
+    // ===== ОСТАЛЬНЫЕ МЕТОДЫ (остаются без изменений) =====
+    
     preloadImages() {
         if (!this.films || this.films.length === 0) return;
         
@@ -94,12 +437,10 @@ export class FilmManager {
                 const img = new Image();
                 img.src = film.img;
                 img.onerror = () => {
-                    // Если изображение не загружается, заменяем на placeholder
                     console.log(`❌ Ошибка загрузки изображения для ${film.title}, заменяем на placeholder`);
                     film.img = this.generatePlaceholder(film.title);
                 };
             } else if (!film.img) {
-                // Если изображения нет, создаем placeholder
                 film.img = this.generatePlaceholder(film.title);
             }
         });
@@ -172,7 +513,6 @@ export class FilmManager {
     
     async deleteFilm(filmId) {
         try {
-            // Находим фильм перед удалением
             const film = this.films.find(f => f.id == filmId);
             
             const response = await fetch(`${this.SUPABASE_URL}/rest/v1/films?id=eq.${filmId}`, {
@@ -273,7 +613,6 @@ export class FilmManager {
             featuredRows: film.featured_data || []
         };
         
-        // Убедимся, что у всех фильмов есть изображение
         if (!normalizedFilm.img || normalizedFilm.img.includes('placeholder.com') || normalizedFilm.img.includes('ffffff')) {
             normalizedFilm.img = this.generatePlaceholder(normalizedFilm.title);
         }
@@ -285,7 +624,6 @@ export class FilmManager {
         return {
             id: null,
             title: "",
-
             year: new Date().getFullYear(),
             rating: 7.0,
             genre: "Фильм",
@@ -372,11 +710,7 @@ export class FilmManager {
             wink: `https://wink.ru/search?query=${encodedTitle}`,
             kion: `https://kion.ru/search?query=${encodedTitle}`,
             premier: `https://premier.one/search?q=${encodedTitle}`,
-            kinopoisk: `https://www.kinopoisk.ru/index.php?kp_query=${encodedTitle}`,
-            moretv: `https://more.tv/search?query=${encodedTitle}`,
-            start: `https://start.ru/search?query=${encodedTitle}`,
-            google: `https://www.google.com/search?q=${encodedTitle}+смотреть+онлайн`,
-            youtube: `https://www.youtube.com/results?search_query=${encodedTitle}+трейлер`
+            kinopoisk: `https://www.kinopoisk.ru/index.php?kp_query=${encodedTitle}`
         };
     }
     
@@ -547,11 +881,9 @@ export class FilmManager {
     }
     
     generatePlaceholder(title) {
-        // Создаем простой цветной placeholder без текста
         const colors = ['#1a1a24', '#2a2a3a', '#3a3a4a', '#4a4a5a'];
         const color = colors[Math.floor(Math.random() * colors.length)];
         
-        // Создаем простой SVG с цветным фоном без текста
         const svg = `
             <svg width="300" height="450" xmlns="http://www.w3.org/2000/svg">
                 <rect width="100%" height="100%" fill="${color}"/>
@@ -559,12 +891,10 @@ export class FilmManager {
             </svg>
         `;
         
-        // Конвертируем SVG в data URL
         return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
     }
     
     darkenColor(color, amount) {
-        // Простая функция для затемнения цвета
         const hex = color.replace('#', '');
         const num = parseInt(hex, 16);
         const amt = Math.round(2.55 * amount * 100);
@@ -682,121 +1012,5 @@ export class FilmManager {
             return true;
         }
         return false;
-    }
-    
-    // Методы для управления кастомными рядами
-    
-    loadCustomRows() {
-        try {
-            const saved = localStorage.getItem('vzorkino_custom_rows');
-            return saved ? JSON.parse(saved) : {};
-        } catch (error) {
-            console.error('Error loading custom rows:', error);
-            return {};
-        }
-    }
-    
-    saveCustomRows() {
-        try {
-            localStorage.setItem('vzorkino_custom_rows', JSON.stringify(this.customRows));
-        } catch (error) {
-            console.error('Error saving custom rows:', error);
-        }
-    }
-    
-    createCustomRow(rowId, name, pageType = 'all', maxRowItems = 20) {
-        this.customRows[rowId] = {
-            id: rowId,
-            name: name,
-            pageType: pageType,
-            maxRowItems: maxRowItems,
-            rowItems: [], // Фильмы, которые показываются в ряду (макс 20)
-            modalItems: [] // Все фильмы, которые показываются в модальном окне
-        };
-        this.saveCustomRows();
-        return this.customRows[rowId];
-    }
-    
-    deleteCustomRow(rowId) {
-        if (this.customRows[rowId]) {
-            delete this.customRows[rowId];
-            this.saveCustomRows();
-            return true;
-        }
-        return false;
-    }
-    
-    addToCustomRowModal(rowId, filmId) {
-        if (!this.customRows[rowId]) return false;
-        
-        if (!this.customRows[rowId].modalItems.includes(filmId)) {
-            this.customRows[rowId].modalItems.push(filmId);
-            this.saveCustomRows();
-            return true;
-        }
-        return false;
-    }
-    
-    removeFromCustomRowModal(rowId, filmId) {
-        if (!this.customRows[rowId]) return false;
-        
-        this.customRows[rowId].modalItems = this.customRows[rowId].modalItems.filter(id => id !== filmId);
-        this.customRows[rowId].rowItems = this.customRows[rowId].rowItems.filter(id => id !== filmId);
-        this.saveCustomRows();
-        return true;
-    }
-    
-    addToCustomRowDisplay(rowId, filmId) {
-        if (!this.customRows[rowId]) return false;
-        
-        // Убедимся, что фильм есть в модальном окне
-        if (!this.customRows[rowId].modalItems.includes(filmId)) {
-            this.customRows[rowId].modalItems.push(filmId);
-        }
-        
-        // Добавляем в ряд, если есть место
-        if (!this.customRows[rowId].rowItems.includes(filmId) && 
-            this.customRows[rowId].rowItems.length < this.customRows[rowId].maxRowItems) {
-            this.customRows[rowId].rowItems.push(filmId);
-            this.saveCustomRows();
-            return true;
-        }
-        return false;
-    }
-    
-    removeFromCustomRowDisplay(rowId, filmId) {
-        if (!this.customRows[rowId]) return false;
-        
-        this.customRows[rowId].rowItems = this.customRows[rowId].rowItems.filter(id => id !== filmId);
-        this.saveCustomRows();
-        return true;
-    }
-    
-    getCustomRow(rowId) {
-        return this.customRows[rowId] || null;
-    }
-    
-    getAllCustomRows() {
-        return this.customRows;
-    }
-    
-    getCustomRowsForPage(pageType) {
-        const rows = {};
-        Object.keys(this.customRows).forEach(rowId => {
-            if (this.customRows[rowId].pageType === pageType) {
-                rows[rowId] = this.customRows[rowId];
-            }
-        });
-        return rows;
-    }
-    
-    getCustomRowFilms(rowId, type = 'row') {
-        if (!this.customRows[rowId]) return [];
-        
-        const filmIds = type === 'row' ? this.customRows[rowId].rowItems : this.customRows[rowId].modalItems;
-        
-        return filmIds
-            .map(filmId => this.films.find(film => film.id == filmId))
-            .filter(film => film !== undefined);
     }
 }
