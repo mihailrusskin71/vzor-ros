@@ -1,6 +1,6 @@
 // modules/contentManager.js
 // ===== CONTENT MANAGEMENT =====
-import { PARTNERS, CONTENT_TYPES } from './constants.js';
+import { PARTNERS, CONTENT_TYPES, NEW_RELEASES_CONFIG, ROW_TYPES } from './constants.js';
 import { showAuthModal, showMovieInfo, showSaveNotification } from './modals.js';
 
 export class ContentManager {
@@ -12,7 +12,6 @@ export class ContentManager {
     init() {
         this.setupNavigation();
         this.setupScrollControls();
-        this.setupHomePageScrollControls();
         this.setupSectionHeaderClicks();
         this.renderAllSections();
     }
@@ -40,17 +39,6 @@ export class ContentManager {
         const homePage = document.getElementById('home-page');
         const contentPages = document.getElementById('content-pages');
         const contentTitle = document.getElementById('content-page-title');
-        
-        const contentTopTitle = document.getElementById('content-top-title');
-        if (contentTopTitle) {
-            const topTitles = {
-                'movie': 'Лучшие фильмы',
-                'series': 'Лучшие сериалы', 
-                'cartoon': 'Лучшие мультфильмы'
-            };
-            contentTopTitle.textContent = topTitles[contentType] || 'Лучший контент';
-            contentTopTitle.setAttribute('data-section-type', contentType);
-        }
         
         if (contentType === 'all') {
             homePage.classList.add('active');
@@ -100,54 +88,12 @@ export class ContentManager {
         });
     }
     
-    setupHomePageScrollControls() {
-        this.setupScrollSection('top-movies-scroll');
-        this.setupScrollSection('top-cartoons-scroll');
-        this.setupScrollSection('top-series-scroll');
-        this.setupScrollSection('content-top-content-scroll');
-    }
-    
-    setupScrollSection(sectionId) {
-        const leftBtn = document.querySelector(`.scroll-btn.left[data-section="${sectionId}"]`);
-        const rightBtn = document.querySelector(`.scroll-btn.right[data-section="${sectionId}"]`);
-        const section = document.getElementById(sectionId);
-        
-        if (leftBtn && section) {
-            leftBtn.addEventListener('click', () => {
-                section.scrollLeft -= 300;
-            });
-        }
-        
-        if (rightBtn && section) {
-            rightBtn.addEventListener('click', () => {
-                section.scrollLeft += 300;
-            });
-        }
-    }
-    
     scrollSection(sectionId, direction) {
         const section = document.getElementById(sectionId);
         if (!section) return;
         
-        const scrollAmount = 300;
+        const scrollAmount = 1075; // Прокрутка на 5 карточек (215 * 5 = 1075)
         section.scrollLeft += direction * scrollAmount;
-    }
-    
-    getNewReleases(contentType = 'all', limit = 15) {
-        let films = [...window.filmManager.films];
-        
-        if (contentType !== 'all') {
-            films = films.filter(film => film.contentType === contentType);
-        }
-        
-        // Сортируем по дате создания (новые сначала)
-        films.sort((a, b) => {
-            const dateA = new Date(a.createdAt || 0);
-            const dateB = new Date(b.createdAt || 0);
-            return dateB - dateA;
-        });
-        
-        return films.slice(0, limit);
     }
     
     getPopularContent(contentType, limit = 20) {
@@ -175,135 +121,162 @@ export class ContentManager {
     }
     
     renderAllSections() {
-        this.renderNewReleases();
-        this.renderTopMovies();
-        this.renderTopCartoons();
-        this.renderTopSeries();
+        this.renderCustomRows('all');
     }
     
-    renderNewReleases() {
-        const container = document.getElementById('new-releases');
-        if (!container) return;
+    renderCustomRows(pageType = 'all') {
+        const customRows = window.filmManager.getCustomRowsForPage(pageType);
         
-        const newReleases = this.getNewReleases('all', 15);
-        container.innerHTML = '';
+        // Удаляем старые кастомные ряды для этой страницы
+        document.querySelectorAll('.custom-row-section').forEach(section => {
+            if (section.dataset.pageType === pageType) {
+                section.remove();
+            }
+        });
         
-        if (newReleases.length === 0) {
-            container.innerHTML = '<p class="no-content">Новинки скоро появятся</p>';
-            return;
-        }
-        
-        newReleases.forEach(movie => {
-            const card = this.createMovieCard(movie);
-            container.appendChild(card);
+        Object.keys(customRows).forEach(rowId => {
+            const row = customRows[rowId];
+            const films = window.filmManager.getCustomRowFilms(rowId, 'row');
+            
+            if (films.length > 0) {
+                this.createCustomRow(row, films, pageType);
+            }
         });
     }
     
-    renderTopMovies() {
-        const container = document.getElementById('top-movies-scroll');
-        if (!container) return;
+    createCustomRow(row, films, pageType = 'all') {
+        // Проверяем, существует ли уже такой ряд
+        let existingSection = document.getElementById(`custom-${row.id}`);
         
-        const topMovies = this.getPopularContent('movie', 20);
-        container.innerHTML = '';
-        
-        if (topMovies.length === 0) {
-            container.innerHTML = '<p class="no-content">Популярные фильмы скоро появятся</p>';
-            return;
+        if (!existingSection) {
+            // Создаем новый ряд
+            const section = document.createElement('section');
+            section.className = 'top-section custom-row-section';
+            section.id = `custom-${row.id}`;
+            section.dataset.pageType = pageType;
+            
+            section.innerHTML = `
+                <div class="section-header" style="margin-bottom: 25px;">
+                    <h2 class="section-header-title custom-row-title" data-row-id="${row.id}" style="color: white; cursor: pointer;">
+                        ${row.name} <span class="arrow-icon">›</span>
+                    </h2>
+                </div>
+                <div class="horizontal-scroll-container">
+                    <button class="scroll-btn custom-scroll-btn left" data-section="custom-${row.id}-scroll">‹</button>
+                    <div class="horizontal-scroll" id="custom-${row.id}-scroll"></div>
+                    <button class="scroll-btn custom-scroll-btn right" data-section="custom-${row.id}-scroll">›</button>
+                </div>
+            `;
+            
+            // Вставляем после партнеров на главной
+            if (pageType === 'all') {
+                const partnersSection = document.querySelector('.partners-section');
+                if (partnersSection) {
+                    partnersSection.parentNode.insertBefore(section, partnersSection.nextSibling);
+                } else {
+                    // Если секции партнеров нет, вставляем после hero
+                    const heroSection = document.querySelector('.hero-section');
+                    if (heroSection) {
+                        heroSection.parentNode.insertBefore(section, heroSection.nextSibling);
+                    }
+                }
+            } else {
+                // Для страниц контента вставляем в начало контентной страницы
+                const contentPages = document.getElementById('content-pages');
+                if (contentPages) {
+                    // Находим заголовок страницы
+                    const contentHeader = contentPages.querySelector('.content-header');
+                    if (contentHeader) {
+                        contentHeader.parentNode.insertBefore(section, contentHeader.nextSibling);
+                    } else {
+                        contentPages.insertBefore(section, contentPages.firstChild);
+                    }
+                }
+            }
+            
+            // Добавляем обработчик клика на заголовок
+            const titleElement = section.querySelector('.custom-row-title');
+            if (titleElement) {
+                titleElement.addEventListener('click', () => {
+                    this.showCustomRowModal(row.id);
+                });
+            }
+            
+            // НАСТРАИВАЕМ ПРОКРУТКУ ДЛЯ ЭТОГО РЯДА
+            this.setupCustomRowScrollSection(row.id);
         }
         
-        topMovies.forEach(movie => {
-            const card = this.createHorizontalMovieCard(movie);
-            container.appendChild(card);
-        });
-        
-        const viewAllCard = this.createViewAllCard('movie', 'Лучшие фильмы');
-        container.appendChild(viewAllCard);
+        // Заполняем ряд фильмами
+        const scrollContainer = document.getElementById(`custom-${row.id}-scroll`);
+        if (scrollContainer) {
+            scrollContainer.innerHTML = '';
+            
+            films.forEach(movie => {
+                const card = this.createCustomRowMovieCard(movie);
+                scrollContainer.appendChild(card);
+            });
+            
+            // Добавляем кнопку "Посмотреть все" (как обложку)
+            const viewAllCard = this.createCustomViewAllCard(row.id, row.name);
+            scrollContainer.appendChild(viewAllCard);
+        }
     }
     
-    renderTopCartoons() {
-        const container = document.getElementById('top-cartoons-scroll');
-        if (!container) return;
+    setupCustomRowScrollSection(rowId) {
+        const leftBtn = document.querySelector(`.custom-scroll-btn.left[data-section="custom-${rowId}-scroll"]`);
+        const rightBtn = document.querySelector(`.custom-scroll-btn.right[data-section="custom-${rowId}-scroll"]`);
+        const section = document.getElementById(`custom-${rowId}-scroll`);
         
-        const topCartoons = this.getPopularContent('cartoon', 20);
-        container.innerHTML = '';
+        if (!section || !leftBtn || !rightBtn) return;
         
-        if (topCartoons.length === 0) {
-            container.innerHTML = '<p class="no-content">Популярные мультфильмы скоро появятся</p>';
-            return;
-        }
-        
-        topCartoons.forEach(movie => {
-            const card = this.createHorizontalMovieCard(movie);
-            container.appendChild(card);
+        leftBtn.addEventListener('click', () => {
+            // Ширина карточки + отступ (200px - как в CSS)
+            const cardWidth = 200; // ширина карточки из CSS
+            const gap = 15; // отступ между карточками
+            
+            // Прокрутка на 5 карточек
+            const scrollAmount = (cardWidth + gap) * 5;
+            section.scrollLeft -= scrollAmount;
         });
         
-        const viewAllCard = this.createViewAllCard('cartoon', 'Лучшие мультфильмы');
-        container.appendChild(viewAllCard);
-    }
-    
-    renderTopSeries() {
-        const container = document.getElementById('top-series-scroll');
-        if (!container) return;
-        
-        const topSeries = this.getPopularContent('series', 20);
-        container.innerHTML = '';
-        
-        if (topSeries.length === 0) {
-            container.innerHTML = '<p class="no-content">Популярные сериалы скоро появятся</p>';
-            return;
-        }
-        
-        topSeries.forEach(movie => {
-            const card = this.createHorizontalMovieCard(movie);
-            container.appendChild(card);
+        rightBtn.addEventListener('click', () => {
+            // Ширина карточки + отступ (200px - как в CSS)
+            const cardWidth = 200; // ширина карточки из CSS
+            const gap = 15; // отступ между карточками
+            
+            // Прокрутка на 5 карточек
+            const scrollAmount = (cardWidth + gap) * 5;
+            section.scrollLeft += scrollAmount;
         });
-        
-        const viewAllCard = this.createViewAllCard('series', 'Лучшие сериалы');
-        container.appendChild(viewAllCard);
     }
     
     renderContentPage(contentType) {
-        this.renderContentNewReleases(contentType);
-        this.renderContentTopContent(contentType);
+        this.renderContentCustomRows(contentType);
     }
     
-    renderContentNewReleases(contentType) {
-        const container = document.getElementById('content-new-releases');
-        if (!container) return;
+    renderContentCustomRows(contentType) {
+        const customRows = window.filmManager.getCustomRowsForPage(contentType);
         
-        const newReleases = this.getNewReleases(contentType, 10);
-        container.innerHTML = '';
-        
-        if (newReleases.length === 0) {
-            container.innerHTML = '<p class="no-content">Новинки скоро появятся</p>';
-            return;
-        }
-        
-        newReleases.forEach(movie => {
-            const card = this.createMovieCard(movie);
-            container.appendChild(card);
-        });
-    }
-    
-    renderContentTopContent(contentType) {
-        const container = document.getElementById('content-top-content-scroll');
-        if (!container) return;
-        
-        const topContent = this.getTopContent(contentType, 35);
-        container.innerHTML = '';
-        
-        if (topContent.length === 0) {
-            container.innerHTML = '<p class="no-content">Лучший контент скоро появится</p>';
-            return;
-        }
-        
-        topContent.forEach(movie => {
-            const card = this.createHorizontalMovieCard(movie);
-            container.appendChild(card);
+        // Удаляем ВСЕ кастомные ряды на странице контента перед рендерингом
+        document.querySelectorAll('.custom-row-section').forEach(section => {
+            // Удаляем только те ряды, которые относятся к страницам контента (не главной)
+            if (section.dataset.pageType !== 'all') {
+                section.remove();
+            }
         });
         
-        const viewAllCard = this.createViewAllCard(contentType, `Лучшие ${this.getContentTypeName(contentType)}`);
-        container.appendChild(viewAllCard);
+        // Рендерим только ряды для текущего типа контента
+        Object.keys(customRows).forEach(rowId => {
+            const row = customRows[rowId];
+            // Дополнительная проверка: убедимся, что ряд действительно для этой страницы
+            if (row.pageType === contentType) {
+                const films = window.filmManager.getCustomRowFilms(rowId, 'row');
+                
+                if (films.length > 0) {
+                    this.createCustomRow(row, films, contentType);
+                }
+            }
+        });
     }
     
     getContentTypeName(contentType) {
@@ -317,7 +290,7 @@ export class ContentManager {
     
     createMovieCard(movie) {
         const card = document.createElement('div');
-        card.className = 'movie-card';
+        card.className = 'movie-card custom-row-movie-card';
         
         let displayPartner = movie.partner;
         if (this.currentPage === 'all') {
@@ -331,7 +304,6 @@ export class ContentManager {
         }
         
         const partnerInfo = PARTNERS[displayPartner] || PARTNERS.okko;
-        const contentType = CONTENT_TYPES[movie.contentType] || CONTENT_TYPES.movie;
         const isSaved = window.userManager.isMovieSaved(movie.id);
         
         card.innerHTML = `
@@ -340,38 +312,20 @@ export class ContentManager {
                     ${partnerInfo.name}
                 </div>
                 
-                <div class="bookmark-btn ${isSaved ? 'saved' : ''}" data-id="${movie.id}" 
-                     style="position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s ease; z-index: 2; opacity: 0.7;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="${isSaved ? '#FFD700' : 'white'}" stroke="${isSaved ? '#FFD700' : 'white'}" stroke-width="2">
-                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-                    </svg>
-                </div>
-                
                 <img class="movie-poster" 
                      src="${movie.img}" 
                      alt="${movie.title}"
                      loading="lazy"
                      onerror="this.onerror=null; this.src='${window.filmManager.generatePlaceholder(movie.title)}'">
                 
-                <div class="movie-overlay">
-                    <div class="movie-actions">
-                        <button class="action-btn watch-btn" data-id="${movie.id}">
-                            ▶ Смотреть
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="movie-info">
-                <h3 class="movie-title" title="${movie.title}">${movie.title}</h3>
-                <div class="movie-meta">
-                    <span>${movie.year}</span>
-                    <span class="movie-rating">⭐ ${movie.rating}</span>
-                </div>
-                
-                <div class="movie-details-row">
-                    <span class="movie-genre">${movie.genre}</span>
-                    <button class="info-btn-small" data-id="${movie.id}" title="Информация">
+                <div class="movie-buttons-overlay">
+                    <button class="info-btn-compact" data-id="${movie.id}" title="Информация">
                         Подробнее
+                    </button>
+                    <button class="bookmark-btn-compact ${isSaved ? 'saved' : ''}" data-id="${movie.id}" title="${isSaved ? 'Удалить из сохраненных' : 'Сохранить'}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="${isSaved ? '#FFD700' : 'none'}" stroke="${isSaved ? '#FFD700' : 'white'}" stroke-width="2">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                        </svg>
                     </button>
                 </div>
             </div>
@@ -380,10 +334,10 @@ export class ContentManager {
         this.setupCardInteractions(card, movie);
         return card;
     }
-    
-    createHorizontalMovieCard(movie) {
+
+    createCustomRowMovieCard(movie) {
         const card = document.createElement('div');
-        card.className = 'horizontal-movie-card';
+        card.className = 'movie-card custom-row-movie-card';
         
         let displayPartner = movie.partner;
         if (this.currentPage === 'all') {
@@ -400,63 +354,61 @@ export class ContentManager {
         const isSaved = window.userManager.isMovieSaved(movie.id);
         
         card.innerHTML = `
-            <div class="horizontal-card-inner">
-                <div class="partner-badge-small" style="background: ${partnerInfo.badgeColor}">
+            <div class="movie-card-inner">
+                <div class="partner-badge" style="background: ${partnerInfo.badgeColor}">
                     ${partnerInfo.name}
                 </div>
                 
-                <div class="bookmark-btn-small ${isSaved ? 'saved' : ''}" data-id="${movie.id}">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="${isSaved ? '#FFD700' : 'white'}" stroke="${isSaved ? '#FFD700' : 'white'}" stroke-width="2">
-                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-                    </svg>
-                </div>
-                
-                <img class="horizontal-poster" 
+                <img class="movie-poster" 
                      src="${movie.img}" 
                      alt="${movie.title}"
                      loading="lazy"
                      onerror="this.onerror=null; this.src='${window.filmManager.generatePlaceholder(movie.title)}'">
                 
-                <div class="horizontal-overlay">
-                    <button class="horizontal-watch-btn" data-id="${movie.id}">
-                        ▶
+                <div class="movie-buttons-overlay">
+                    <button class="info-btn-compact" data-id="${movie.id}" title="Информация">
+                        Подробнее
                     </button>
-                </div>
-            </div>
-            <div class="horizontal-info">
-                <h4 class="horizontal-title" title="${movie.title}">${movie.title}</h4>
-                <div class="horizontal-meta">
-                    <span>${movie.year}</span>
-                    <span>⭐ ${movie.rating}</span>
+                    <button class="bookmark-btn-compact ${isSaved ? 'saved' : ''}" data-id="${movie.id}" title="${isSaved ? 'Удалить из сохраненных' : 'Сохранить'}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="${isSaved ? '#FFD700' : 'none'}" stroke="${isSaved ? '#FFD700' : 'white'}" stroke-width="2">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
         `;
         
-        this.setupHorizontalCardInteractions(card, movie);
+        this.setupCustomRowCardInteractions(card, movie);
         return card;
     }
     
-    createViewAllCard(contentType, sectionTitle) {
+    createCustomViewAllCard(rowId, rowName) {
         const card = document.createElement('div');
-        card.className = 'horizontal-movie-card view-all-card';
+        card.className = 'movie-card custom-row-view-all-card';
         
         card.innerHTML = `
-            <div class="horizontal-card-inner">
-                <div class="view-all-content">
-                    <div class="view-all-icon">››</div>
-                    <div class="view-all-text">Посмотреть все</div>
+            <div class="movie-card-inner">
+                <div class="partner-badge" style="background: linear-gradient(135deg, #666, #444)">
+                    Все
                 </div>
+                
+                <div class="custom-view-all-placeholder">
+                    <div class="custom-view-all-icon">››</div>
+                    <div class="custom-view-all-text">Посмотреть все</div>
+                </div>
+                
+                <div class="custom-view-all-gradient-overlay"></div>
             </div>
         `;
         
         card.addEventListener('click', () => {
-            this.showFullSection(contentType, sectionTitle);
+            this.showCustomRowModal(rowId);
         });
         
         return card;
     }
     
-    showFullSection(contentType, sectionTitle) {
+    showFullSection(contentType, sectionTitle, rowType = null) {
         const navLinks = document.querySelectorAll('.nav-link');
         navLinks.forEach(link => link.classList.remove('active'));
         
@@ -468,22 +420,107 @@ export class ContentManager {
         }
     }
     
+    showCustomRowModal(rowId) {
+        const row = window.filmManager.getCustomRow(rowId);
+        if (!row) return;
+        
+        const films = window.filmManager.getCustomRowFilms(rowId, 'modal');
+        
+        let modal = document.getElementById(`custom-row-modal-${rowId}`);
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = `custom-row-modal-${rowId}`;
+            modal.className = 'custom-row-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.97);
+                display: none;
+                justify-content: center;
+                align-items: center;
+                z-index: 10008;
+                padding: 20px;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: rgba(20, 20, 25, 0.98); border-radius: 20px; padding: 40px; max-width: 1200px; width: 95%; max-height: 95vh; overflow-y: auto; position: relative; box-shadow: 0 25px 80px rgba(0,0,0,0.9); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(20px);">
+                    <button class="close-custom-modal" style="position: absolute; top: 25px; right: 25px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: var(--text-secondary); font-size: 28px; cursor: pointer; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.3s ease;">×</button>
+                    <h2 style="margin: 0 0 30px 0; color: var(--text-primary); text-align: center; font-size: 32px; font-weight: 700;">${row.name}</h2>
+                    <div class="custom-modal-content" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 25px; padding: 15px;"></div>
+                    ${films.length === 0 ? '<p style="text-align: center; color: var(--text-secondary); padding: 60px; font-size: 18px;">В этой коллекции пока нет контента</p>' : ''}
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            const closeBtn = modal.querySelector('.close-custom-modal');
+            closeBtn.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+            
+            closeBtn.addEventListener('mouseenter', function() {
+                this.style.background = 'rgba(255,255,255,0.2)';
+                this.style.color = 'white';
+                this.style.transform = 'rotate(90deg)';
+            });
+            
+            closeBtn.addEventListener('mouseleave', function() {
+                this.style.background = 'rgba(255,255,255,0.1)';
+                this.style.color = 'var(--text-secondary)';
+                this.style.transform = 'rotate(0deg)';
+            });
+            
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+        
+        const content = modal.querySelector('.custom-modal-content');
+        content.innerHTML = '';
+        
+        films.forEach(movie => {
+            // Используем ту же функцию создания карточки, что и в ряду
+            const card = this.createCustomRowMovieCard(movie);
+            
+            // Добавляем обработчик для кнопки "Подробнее" в модальном окне
+            const infoBtn = card.querySelector('.info-btn-compact');
+            if (infoBtn) {
+                infoBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // НЕ закрываем модальное окно ряда!
+                    // Просто открываем модальное окно информации о фильме
+                    showMovieInfo(movie);
+                });
+            }
+            
+            // Обработчик для кнопки закладки
+            const bookmarkBtn = card.querySelector('.bookmark-btn-compact');
+            if (bookmarkBtn) {
+                bookmarkBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.toggleBookmark(movie.id, bookmarkBtn, movie.title);
+                });
+            }
+            
+            content.appendChild(card);
+        });
+        
+        modal.style.display = 'flex';
+    }
+    
     setupCardInteractions(card, movie) {
-        const bookmarkBtn = card.querySelector('.bookmark-btn');
-        const watchBtn = card.querySelector('.watch-btn');
-        const infoBtn = card.querySelector('.info-btn-small');
+        const bookmarkBtn = card.querySelector('.bookmark-btn-compact');
+        const infoBtn = card.querySelector('.info-btn-compact');
         
         if (bookmarkBtn) {
             bookmarkBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.toggleBookmark(movie.id, bookmarkBtn, movie.title);
-            });
-        }
-        
-        if (watchBtn) {
-            watchBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.watchMovie(movie);
             });
         }
         
@@ -494,17 +531,26 @@ export class ContentManager {
             });
         }
         
-        // Клик по карточке открывает информацию о фильме
+        // Клик по карточке (плакату) открывает просмотр у партнера
         card.addEventListener('click', (e) => {
             if (!e.target.closest('button')) {
-                showMovieInfo(movie);
+                this.watchMovie(movie);
             }
+        });
+        
+        // Анимация при наведении
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-8px)';
+        });
+        
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
         });
     }
     
-    setupHorizontalCardInteractions(card, movie) {
-        const bookmarkBtn = card.querySelector('.bookmark-btn-small');
-        const watchBtn = card.querySelector('.horizontal-watch-btn');
+    setupCustomRowCardInteractions(card, movie) {
+        const bookmarkBtn = card.querySelector('.bookmark-btn-compact');
+        const infoBtn = card.querySelector('.info-btn-compact');
         
         if (bookmarkBtn) {
             bookmarkBtn.addEventListener('click', (e) => {
@@ -513,18 +559,27 @@ export class ContentManager {
             });
         }
         
-        if (watchBtn) {
-            watchBtn.addEventListener('click', (e) => {
+        if (infoBtn) {
+            infoBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.watchMovie(movie);
+                showMovieInfo(movie);
             });
         }
         
-        // Клик по карточке открывает информацию о фильме
+        // Клик по карточке (плакату) открывает просмотр у партнера
         card.addEventListener('click', (e) => {
             if (!e.target.closest('button')) {
-                showMovieInfo(movie);
+                this.watchMovie(movie);
             }
+        });
+        
+        // Анимация при наведении
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-8px)';
+        });
+        
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
         });
     }
     
@@ -541,8 +596,8 @@ export class ContentManager {
             button.classList.remove('saved');
             const svg = button.querySelector('svg');
             if (svg) {
-                svg.setAttribute('fill', 'white');
-                svg.setAttribute('stroke', 'white');
+                svg.setAttribute('fill', 'none');
+                svg.setAttribute('stroke', 'currentColor');
             }
             showSaveNotification(false, movieTitle);
         } else {
