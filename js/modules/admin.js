@@ -1,6 +1,7 @@
 // modules/admin.js
 // ===== ADMIN PANEL =====
 import { showAdminMessage } from './utils.js';
+import { ROW_TYPES } from './constants.js';
 
 export function initAdmin() {
     createAdminPanel();
@@ -87,7 +88,65 @@ function createAdminPanel() {
             </div>
             
             <div style="margin-bottom: 25px;">
-                <h4 style="margin: 0 0 15px 0; color: var(--text-primary);">🗑️ Управление контентом (${window.filmManager.films.length})</h4>
+                <h4 style="margin: 0 0 15px 0; color: var(--text-primary);">🎬 Управление кастомными рядами</h4>
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                    <div style="display: grid; grid-template-columns: 1fr auto; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <input type="text" id="newRowName" placeholder="Название нового ряда" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 14px;">
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <select id="newRowPageType" style="padding: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 14px;">
+                                <option value="all">Главная</option>
+                                <option value="movie">Фильмы</option>
+                                <option value="series">Сериалы</option>
+                                <option value="cartoon">Мультфильмы</option>
+                            </select>
+                            <button id="createRowBtn" style="padding: 10px 15px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Создать ряд</button>
+                        </div>
+                    </div>
+                    
+                    <div id="customRowsList" style="max-height: 200px; overflow-y: auto; background: var(--bg-card); border-radius: 6px; padding: 10px;">
+                        <!-- Список кастомных рядов будет здесь -->
+                    </div>
+                </div>
+                
+                <div id="rowManagementContent" style="display: none;">
+                    <h5 id="currentRowTitle" style="margin: 0 0 15px 0; color: var(--text-primary);"></h5>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; color: var(--text-primary); font-weight: 600;">Добавить фильм в модальное окно</label>
+                            <input type="text" id="filmSearchInput" placeholder="Поиск фильма..." style="width: 100%; padding: 10px; margin-bottom: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 14px;">
+                            <select id="addToModalSelect" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 14px;">
+                                <option value="">Выберите фильм</option>
+                            </select>
+                            <button id="addToModalBtn" style="width: 100%; padding: 10px; margin-top: 10px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Добавить в модальное окно</button>
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; color: var(--text-primary); font-weight: 600;">Добавить фильм в ряд (макс 20)</label>
+                            <select id="addToRowDisplaySelect" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 14px;">
+                                <option value="">Выберите фильм из модального окна</option>
+                            </select>
+                            <button id="addToRowDisplayBtn" style="width: 100%; padding: 10px; margin-top: 10px; background: #10B981; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Добавить в ряд</button>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <h6 style="margin: 0 0 10px 0; color: var(--text-primary);">Фильмы в модальном окне</h6>
+                                <div id="modalFilmsList" style="max-height: 200px; overflow-y: auto; background: var(--bg-card); border-radius: 6px; padding: 10px;"></div>
+                            </div>
+                            <div>
+                                <h6 style="margin: 0 0 10px 0; color: var(--text-primary);">Фильмы в ряду (макс 20)</h6>
+                                <div id="rowDisplayFilmsList" style="max-height: 200px; overflow-y: auto; background: var(--bg-card); border-radius: 6px; padding: 10px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 25px;">
+                <h4 style="margin: 0 0 15px 0; color: var(--text-primary);">🗑️ Управление контентом (${window.filmManager ? window.filmManager.films.length : 0})</h4>
                 <div id="filmsList" style="max-height: 300px; overflow-y: auto; background: var(--bg-secondary); border-radius: 8px; padding: 15px;">
                     <!-- Список фильмов будет здесь -->
                 </div>
@@ -117,6 +176,7 @@ function setupAdminFunctions() {
             document.getElementById('adminContent').style.display = 'block';
             updateStats();
             renderFilmsList();
+            setupCustomRowsManager();
             showAdminMessage('✅ Успешный вход в админку');
         } else {
             showAdminMessage('❌ Неверный пароль', 'error');
@@ -142,7 +202,6 @@ function setupAdminFunctions() {
         
         const result = await window.filmManager.autoAddFilm(title, year, contentType);
         if (result) {
-            window.contentManager.refreshAllSections();
             updateStats();
             renderFilmsList();
             document.getElementById('autoFilmTitle').value = '';
@@ -188,7 +247,6 @@ function setupAdminFunctions() {
         const successCount = results.filter(r => r !== null).length;
         
         showAdminMessage(`✅ Добавлено ${successCount} из ${films.length} позиций`);
-        window.contentManager.refreshAllSections();
         updateStats();
         renderFilmsList();
         document.getElementById('bulkFilms').value = '';
@@ -204,12 +262,14 @@ function setupAdminFunctions() {
         const partner = prompt('Партнер (okko, ivi, wink, kion, premier, kinopoisk):', 'okko') || 'okko';
         const tags = prompt('Теги (через запятую):', '') || '';
         const seasons = contentType === 'series' ? parseInt(prompt('Количество сезонов:', '1')) || 1 : 1;
+        const yearInput = prompt('Год:', new Date().getFullYear());
+        const year = yearInput ? parseInt(yearInput) : new Date().getFullYear();
         
         const film = {
             ...window.filmManager.getTemplate(),
             id: Date.now(),
             title: title,
-            year: parseInt(prompt('Год:') || new Date().getFullYear()),
+            year: year,
             rating: rating,
             genre: genre,
             partner: partner,
@@ -232,12 +292,17 @@ function setupAdminFunctions() {
             }
         };
         
-        window.filmManager.films.unshift(film);
-        window.filmManager.saveFilms();
-        window.contentManager.refreshAllSections();
-        updateStats();
-        renderFilmsList();
-        showAdminMessage(`✅ "${title}" добавлен вручную`);
+        try {
+            const savedFilm = window.filmManager.saveFilmToSupabase(film);
+            if (savedFilm) {
+                updateStats();
+                renderFilmsList();
+                showAdminMessage(`✅ "${title}" добавлен вручную`);
+            }
+        } catch (error) {
+            console.error('Error saving manual film:', error);
+            showAdminMessage('❌ Ошибка при добавлении', 'error');
+        }
     });
     
     document.getElementById('exportBtn').addEventListener('click', () => {
@@ -251,15 +316,298 @@ function setupAdminFunctions() {
         
         showAdminMessage('💾 База контента экспортирована');
     });
+    
+    // Управление кастомными рядами
+    document.getElementById('createRowBtn').addEventListener('click', () => {
+        const rowName = document.getElementById('newRowName').value.trim();
+        const pageType = document.getElementById('newRowPageType').value;
+        
+        if (!rowName) {
+            showAdminMessage('Введите название ряда', 'error');
+            return;
+        }
+        
+        const rowId = 'custom_' + Date.now();
+        const newRow = window.filmManager.createCustomRow(rowId, rowName, pageType, 20);
+        
+        if (newRow) {
+            showAdminMessage(`✅ Ряд "${rowName}" создан`);
+            document.getElementById('newRowName').value = '';
+            renderCustomRowsList();
+        }
+    });
+    
+    document.getElementById('addToModalBtn').addEventListener('click', () => {
+        const rowId = document.getElementById('rowManagementContent').dataset.currentRow;
+        const filmId = parseInt(document.getElementById('addToModalSelect').value);
+        
+        if (filmId && rowId) {
+            const success = window.filmManager.addToCustomRowModal(rowId, filmId);
+            if (success) {
+                showAdminMessage(`✅ Фильм добавлен в модальное окно`);
+                showCustomRowManagement(rowId);
+            }
+        }
+    });
+    
+    document.getElementById('addToRowDisplayBtn').addEventListener('click', () => {
+        const rowId = document.getElementById('rowManagementContent').dataset.currentRow;
+        const filmId = parseInt(document.getElementById('addToRowDisplaySelect').value);
+        
+        if (filmId && rowId) {
+            const success = window.filmManager.addToCustomRowDisplay(rowId, filmId);
+            if (success) {
+                showAdminMessage(`✅ Фильм добавлен в ряд`);
+                showCustomRowManagement(rowId);
+                if (window.contentManager) {
+                    window.contentManager.refreshAllSections();
+                }
+            } else {
+                showAdminMessage('❌ Не удалось добавить фильм в ряд (максимум 20)', 'error');
+            }
+        }
+    });
+
+    // Поиск фильмов в управлении кастомными рядами
+    document.getElementById('filmSearchInput').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const select = document.getElementById('addToModalSelect');
+        const options = select.querySelectorAll('option');
+        
+        options.forEach(option => {
+            if (option.value === '') return;
+            const text = option.textContent.toLowerCase();
+            if (text.includes(searchTerm)) {
+                option.style.display = '';
+            } else {
+                option.style.display = 'none';
+            }
+        });
+    });
+}
+
+function setupCustomRowsManager() {
+    renderCustomRowsList();
+}
+
+function renderCustomRowsList() {
+    const container = document.getElementById('customRowsList');
+    if (!container) return;
+    
+    const customRows = window.filmManager.getAllCustomRows();
+    container.innerHTML = '';
+    
+    if (Object.keys(customRows).length === 0) {
+        container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px;">Нет созданных рядов</div>';
+        return;
+    }
+    
+    Object.keys(customRows).forEach(rowId => {
+        const row = customRows[rowId];
+        const rowItem = document.createElement('div');
+        rowItem.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: var(--bg-modal);
+            border-radius: 6px;
+            border-left: 4px solid var(--accent);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        `;
+        
+        rowItem.innerHTML = `
+            <div>
+                <div style="font-weight: 600; color: var(--text-primary);">${row.name}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                    ${row.pageType === 'all' ? 'Главная' : row.pageType} • 
+                    ${row.rowItems.length} в ряду • 
+                    ${row.modalItems.length} в модальном окне
+                </div>
+            </div>
+            <div style="display: flex; gap: 5px;">
+                <button class="manage-custom-row-btn" data-row-id="${rowId}" style="background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;">Управлять</button>
+                <button class="delete-custom-row-btn" data-row-id="${rowId}" style="background: #EF4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;">Удалить</button>
+            </div>
+        `;
+        
+        container.appendChild(rowItem);
+        
+        // Обработчики для кнопок
+        rowItem.querySelector('.manage-custom-row-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            showCustomRowManagement(rowId);
+        });
+        
+        rowItem.querySelector('.delete-custom-row-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm(`Удалить ряд "${row.name}"?`)) {
+                const success = window.filmManager.deleteCustomRow(rowId);
+                if (success) {
+                    showAdminMessage(`✅ Ряд "${row.name}" удален`);
+                    renderCustomRowsList();
+                    if (window.contentManager) {
+                        window.contentManager.refreshAllSections();
+                    }
+                }
+            }
+        });
+        
+        rowItem.addEventListener('click', () => {
+            showCustomRowManagement(rowId);
+        });
+    });
+}
+
+function showCustomRowManagement(rowId) {
+    const row = window.filmManager.getCustomRow(rowId);
+    if (!row) return;
+    
+    document.getElementById('currentRowTitle').textContent = `Управление рядом: ${row.name}`;
+    document.getElementById('rowManagementContent').style.display = 'block';
+    document.getElementById('rowManagementContent').dataset.currentRow = rowId;
+    
+    // Сбрасываем поиск
+    document.getElementById('filmSearchInput').value = '';
+    
+    // Заполняем список фильмов для добавления в модальное окно
+    const modalSelect = document.getElementById('addToModalSelect');
+    modalSelect.innerHTML = '<option value="">Выберите фильм</option>';
+    
+    window.filmManager.films.forEach(film => {
+        const option = document.createElement('option');
+        option.value = film.id;
+        option.textContent = `${film.title} (${film.year})`;
+        modalSelect.appendChild(option);
+    });
+    
+    // Заполняем список фильмов для добавления в ряд (только из модального окна)
+    const rowSelect = document.getElementById('addToRowDisplaySelect');
+    rowSelect.innerHTML = '<option value="">Выберите фильм из модального окна</option>';
+    
+    const modalFilms = window.filmManager.getCustomRowFilms(rowId, 'modal');
+    modalFilms.forEach(film => {
+        if (!row.rowItems.includes(film.id)) {
+            const option = document.createElement('option');
+            option.value = film.id;
+            option.textContent = `${film.title} (${film.year})`;
+            rowSelect.appendChild(option);
+        }
+    });
+    
+    // Показываем текущие фильмы в модальном окне
+    const modalFilmsList = document.getElementById('modalFilmsList');
+    modalFilmsList.innerHTML = '';
+    
+    if (modalFilms.length === 0) {
+        modalFilmsList.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px;">Модальное окно пусто</div>';
+    } else {
+        modalFilms.forEach(film => {
+            const filmItem = document.createElement('div');
+            filmItem.style.cssText = `
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px;
+                margin-bottom: 5px;
+                background: var(--bg-modal);
+                border-radius: 4px;
+                border-left: 3px solid var(--accent);
+            `;
+            
+            const isInRow = row.rowItems.includes(film.id);
+            
+            filmItem.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; color: var(--text-primary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${film.title}</div>
+                    <div style="font-size: 10px; color: var(--text-secondary);">${film.year} • ${film.genre}</div>
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    ${isInRow ? '<span style="font-size: 10px; color: #10B981; font-weight: 600;">В ряду</span>' : ''}
+                    <button class="remove-from-modal-btn" data-film-id="${film.id}" style="background: #EF4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;">Удалить</button>
+                </div>
+            `;
+            
+            modalFilmsList.appendChild(filmItem);
+        });
+        
+        // Настраиваем кнопки удаления из модального окна
+        document.querySelectorAll('.remove-from-modal-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const filmId = parseInt(btn.dataset.filmId);
+                const success = window.filmManager.removeFromCustomRowModal(rowId, filmId);
+                if (success) {
+                    showAdminMessage('✅ Фильм удален из модального окна');
+                    showCustomRowManagement(rowId);
+                    if (window.contentManager) {
+                        window.contentManager.refreshAllSections();
+                    }
+                }
+            });
+        });
+    }
+    
+    // Показываем текущие фильмы в ряду
+    const rowFilms = window.filmManager.getCustomRowFilms(rowId, 'row');
+    const rowDisplayFilmsList = document.getElementById('rowDisplayFilmsList');
+    rowDisplayFilmsList.innerHTML = '';
+    
+    if (rowFilms.length === 0) {
+        rowDisplayFilmsList.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px;">Ряд пуст</div>';
+    } else {
+        rowFilms.forEach(film => {
+            const filmItem = document.createElement('div');
+            filmItem.style.cssText = `
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px;
+                margin-bottom: 5px;
+                background: var(--bg-modal);
+                border-radius: 4px;
+                border-left: 3px solid #10B981;
+            `;
+            
+            filmItem.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; color: var(--text-primary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${film.title}</div>
+                    <div style="font-size: 10px; color: var(--text-secondary);">${film.year} • ${film.genre}</div>
+                </div>
+                <button class="remove-from-row-display-btn" data-film-id="${film.id}" style="background: #EF4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;">Удалить</button>
+            `;
+            
+            rowDisplayFilmsList.appendChild(filmItem);
+        });
+        
+        // Настраиваем кнопки удаления из ряда
+        document.querySelectorAll('.remove-from-row-display-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const filmId = parseInt(btn.dataset.filmId);
+                const success = window.filmManager.removeFromCustomRowDisplay(rowId, filmId);
+                if (success) {
+                    showAdminMessage('✅ Фильм удален из ряда');
+                    showCustomRowManagement(rowId);
+                    if (window.contentManager) {
+                        window.contentManager.refreshAllSections();
+                    }
+                }
+            });
+        });
+    }
 }
 
 function updateStats() {
     const statsEl = document.getElementById('statsInfo');
-    if (statsEl) {
+    if (statsEl && window.filmManager) {
         const totalFilms = window.filmManager.films.length;
         const withPosters = window.filmManager.films.filter(f => !f.img.includes('placeholder')).length;
         const totalReviews = window.filmManager.films.reduce((sum, film) => sum + (film.reviews ? film.reviews.length : 0), 0);
         const totalRatings = window.filmManager.films.reduce((sum, film) => sum + (film.userRatings ? film.userRatings.length : 0), 0);
+        const customRowsCount = Object.keys(window.filmManager.getAllCustomRows()).length;
         
         const partnerStats = {};
         const contentStats = {};
@@ -281,6 +629,7 @@ function updateStats() {
             С постерами: <strong>${withPosters}</strong><br>
             Всего отзывов: <strong>${totalReviews}</strong><br>
             Всего оценок: <strong>${totalRatings}</strong><br>
+            Кастомные ряды: <strong>${customRowsCount}</strong><br>
             <br>По типам:<br>${contentStatsText}
             <br>По партнерам:<br>${partnerStatsText}
         `;
@@ -289,9 +638,15 @@ function updateStats() {
 
 function renderFilmsList() {
     const filmsList = document.getElementById('filmsList');
-    if (!filmsList) return;
+    if (!filmsList || !window.filmManager) return;
     
     filmsList.innerHTML = '';
+    
+    // Обновляем заголовок
+    const filmsTitle = filmsList.parentElement.querySelector('h4');
+    if (filmsTitle) {
+        filmsTitle.textContent = `🗑️ Управление контентом (${window.filmManager.films.length})`;
+    }
     
     window.filmManager.films.forEach(film => {
         const filmItem = document.createElement('div');
@@ -325,9 +680,7 @@ function renderFilmsList() {
                         <span style="font-size: 11px; color: ${contentType.color}; background: rgba(139, 92, 246, 0.1); padding: 2px 6px; border-radius: 4px;">
                             ${contentType.name}
                         </span>
-                        <span style="font-size: 11px; color: ${partnerInfo.color.split(' ')[1] || '#8B5CF6'};">
-                            ${partnerInfo.name}
-                        </span>
+                        <span style="font-size: 11px; color: ${partnerInfo.color.split(' ')[1] || '#8B5CF6'};">${partnerInfo.name}</span>
                     </div>
                 </div>
             </div>
@@ -357,15 +710,18 @@ function renderFilmsList() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const filmId = btn.dataset.id;
-            if (confirm(`Удалить "${window.filmManager.films.find(f => f.id == filmId)?.title}"?`)) {
+            const film = window.filmManager.films.find(f => f.id == filmId);
+            if (film && confirm(`Удалить "${film.title}"?`)) {
                 window.filmManager.deleteFilm(filmId);
                 renderFilmsList();
-                window.contentManager.refreshAllSections();
                 updateStats();
                 showAdminMessage('✅ Контент удален');
             }
         });
     });
+    
+    // Экспортируем функцию для глобального использования
+    window.renderFilmsListFromAdmin = renderFilmsList;
 }
 
 function makeElementDraggable(element) {
