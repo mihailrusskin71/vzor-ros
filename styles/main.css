@@ -1,16 +1,19 @@
 /* ===== VARIABLES ===== */
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #111117;
-  --bg-card: #1a1a24;
-  --bg-modal: #151520;
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-panel: #111113; /* НОВЫЙ ЦВЕТ ПАНЕЛЕЙ */
+  --bg-card: #1a1a1a;
+  --bg-modal: #151515;
   --accent: #FF6A2B;
   --accent-hover: #ff8a5c;
   --text-primary: #ffffff;
-  --text-secondary: #a0a0b0;
-  --text-muted: #6a6a80;
-  --border: #2a2a3a;
-  --border-light: #3a3a4a;
+  --text-secondary: #a0a0a0;
+  --text-muted: #666666;
+  --border: #3a3a3d; /* Более темные линии для темных панелей */
+  --border-light: #4a4a4d;
+  --border-orange: rgba(255, 106, 43, 0.15);
+  --border-panel: #3a3a3d;
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6);
   --radius: 12px;
@@ -18,19 +21,106 @@
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ===== RESET & BASE ===== */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
+/* ===== ФОН И СТРУКТУРА САЙТА ===== */
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Верхняя панель на всю ширину */
+#top-full-width-panel {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-panel);
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Основной контейнер с боковыми областями */
+#main-container {
+  display: flex;
+  max-width: 1800px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - 120px);
+  background: transparent;
+}
+
+/* Центральная область с контентом */
+#center-content {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-panel);
+  position: relative;
+  z-index: 1;
+  border-left: 1px solid var(--border-panel);
+  border-right: 1px solid var(--border-panel);
+}
+
+/* Внутренний контейнер центральной части */
+.center-inner {
+  width: 100%;
+  height: 100%;
+}
+
+/* БОКОВЫЕ ОБЛАСТИ - ПРОЗРАЧНЫЕ ДЛЯ ЭФФЕКТА ФОНА */
+.sidebar {
+  width: 300px;
+  min-width: 300px;
+  position: relative;
+  overflow: hidden;
+  background: transparent; /* ПРОЗРАЧНЫЙ ФОН */
+  z-index: 1;
+}
+
+/* Границы для боковых областей */
+#left-sidebar {
+  border-right: 1px solid rgba(255, 106, 43, 0.1);
+}
+
+#right-sidebar {
+  border-left: 1px solid rgba(255, 106, 43, 0.1);
+}
+
+/* Нижняя панель на всю ширину */
+#bottom-full-width-panel {
+  width: 100%;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-panel);
+  margin-top: 0;
+  z-index: 1;
+}
+
+/* Анимация для плавного появления */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+#main-container {
+  animation: fadeIn 0.8s ease-out;
+}
+
+/* ===== RESET & BASE ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 .container {
@@ -41,9 +131,6 @@ body {
 
 /* ===== HEADER ===== */
 .site-header {
-  background: rgba(10, 10, 15, 0.95);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -171,13 +258,14 @@ body {
 
 /* ===== MAIN CONTENT ===== */
 .main-content {
-  min-height: 100vh;
+  min-height: calc(100vh - 200px);
   padding: 40px 0;
+  background: transparent;
 }
 
 /* ===== HERO SECTION ===== */
 .hero-section {
-  background: linear-gradient(135deg, rgba(255, 106, 43, 0.1), rgba(10, 10, 15, 0.8));
+  background: linear-gradient(135deg, rgba(255, 106, 43, 0.1), rgba(0, 0, 0, 0.8));
   border-radius: var(--radius);
   padding: 60px 40px;
   margin-bottom: 40px;
@@ -276,8 +364,8 @@ body {
 /* ===== CATALOG GRID ===== */
 .catalog-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 20px;
 }
 
 .movie-card {
@@ -288,6 +376,7 @@ body {
   cursor: pointer;
   position: relative;
   border: 1px solid var(--border);
+  width: 190px;
 }
 
 .movie-card:hover {
@@ -299,7 +388,7 @@ body {
 .movie-card-inner {
   position: relative;
   width: 100%;
-  height: 300px;
+  height: 285px;
 }
 
 .movie-poster {
@@ -386,8 +475,8 @@ body {
 
 /* СТИЛИ ДЛЯ КАСТОМНЫХ РЯДОВ */
 .custom-row-movie-card {
-  width: 200px;
-  height: 300px;
+  width: 190px;
+  height: 285px;
   flex-shrink: 0;
   margin: 0 !important;
 }
@@ -454,7 +543,6 @@ body {
   justify-content: center;
   white-space: nowrap;
   min-height: 36px;
-  backdrop-filter: blur(10px);
 }
 
 .custom-row-movie-card .info-btn-compact:hover {
@@ -476,7 +564,6 @@ body {
   cursor: pointer;
   transition: all 0.3s ease;
   flex-shrink: 0;
-  backdrop-filter: blur(10px);
 }
 
 .custom-row-movie-card .bookmark-btn-compact:hover {
@@ -514,7 +601,6 @@ body {
   justify-content: center;
   white-space: nowrap;
   min-height: 36px;
-  backdrop-filter: blur(10px);
 }
 
 .info-btn-compact:hover {
@@ -535,7 +621,6 @@ body {
   cursor: pointer;
   transition: all 0.3s ease;
   flex-shrink: 0;
-  backdrop-filter: blur(10px);
 }
 
 .bookmark-btn-compact:hover {
@@ -574,7 +659,7 @@ body {
   height: 0;
 }
 
-/* Улучшенная прокрутка в кастомных рядах */
+/* Улучшенная прокрутки в кастомных рядах */
 .custom-row-section .horizontal-scroll {
   display: flex !important;
   gap: 15px !important;
@@ -585,9 +670,9 @@ body {
 }
 
 .custom-row-section .custom-row-movie-card {
-  width: 200px !important;
-  min-width: 200px !important;
-  max-width: 200px !important;
+  width: 190px !important;
+  min-width: 190px !important;
+  max-width: 190px !important;
   flex-shrink: 0;
   margin: 0 !important;
 }
@@ -604,7 +689,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px !important; /* Уменьшено с ~45px до 25px */
+  margin-bottom: 25px !important;
 }
 
 /* Для кастомных рядов тоже */
@@ -725,16 +810,15 @@ body {
 
 /* ===== FOOTER ===== */
 .site-footer {
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border);
-  margin-top: 80px;
+  background: var(--bg-panel);
+  padding: 40px 0 20px;
 }
 
 .footer-content {
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 60px;
-  padding: 60px 0 40px;
+  padding: 0 0 40px;
 }
 
 .footer-brand .logo {
@@ -744,6 +828,13 @@ body {
 .footer-brand p {
   color: var(--text-secondary);
   line-height: 1.6;
+}
+
+.legal-info p {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 8px;
 }
 
 .footer-links {
@@ -773,7 +864,7 @@ body {
 }
 
 .footer-bottom {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-panel);
   padding: 24px 0;
   text-align: center;
   color: var(--text-muted);
@@ -930,7 +1021,7 @@ h3.custom-row-title:hover,
   height: 32px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-panel);
   color: white;
   font-size: 16px;
   cursor: pointer;
@@ -939,12 +1030,11 @@ h3.custom-row-title:hover,
   align-items: center;
   justify-content: center;
   opacity: 0.7;
-  backdrop-filter: blur(5px);
 }
 
 .custom-scroll-btn:hover {
   background: rgba(0, 0, 0, 0.7);
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 106, 43, 0.3);
   transform: translateY(-50%) scale(1.1);
   opacity: 1;
 }
@@ -963,15 +1053,14 @@ h3.custom-row-title:hover,
   height: 60px;
   border-radius: 6px;
   background: rgba(20, 20, 30, 0.4);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-panel);
   font-size: 20px;
   opacity: 0.6;
 }
 
 .custom-row-section .custom-scroll-btn:hover {
   background: rgba(40, 40, 50, 0.6);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 106, 43, 0.3);
   transform: translateY(-50%) scale(1.05);
   box-shadow: 0 0 15px rgba(255, 106, 43, 0.2);
   opacity: 0.9;
@@ -987,10 +1076,10 @@ h3.custom-row-title:hover,
 
 /* Стили для кастомного ряда "Посмотреть все" */
 .custom-row-view-all-card {
-  width: 200px !important;
-  min-width: 200px !important;
-  max-width: 200px !important;
-  height: 300px;
+  width: 190px !important;
+  min-width: 190px !important;
+  max-width: 190px !important;
+  height: 285px;
   flex-shrink: 0;
   margin: 0 !important;
 }
@@ -1106,8 +1195,7 @@ h3.custom-row-title:hover,
 /* Стили для модального окна кастомного ряда */
 .custom-row-modal > div {
   background: rgba(20, 20, 25, 0.98);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-panel);
   max-width: 1200px !important;
   width: 95% !important;
   margin: 0 auto;
@@ -1119,8 +1207,42 @@ h3.custom-row-title:hover,
   box-shadow: 0 25px 80px rgba(0,0,0,0.9);
 }
 
-/* ===== RESPONSIVE ===== */
+/* Стили для контейнера на мобильных устройствах */
+@media (max-width: 1200px) {
+  .sidebar {
+    width: 250px;
+    min-width: 250px;
+  }
+}
+
 @media (max-width: 1024px) {
+  #main-container {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    height: 100px;
+    order: -1;
+    background: transparent;
+  }
+  
+  #left-sidebar {
+    margin-bottom: 20px;
+  }
+  
+  #right-sidebar {
+    margin-top: 20px;
+    order: 3;
+  }
+  
+  #center-content {
+    order: 2;
+    border-left: none;
+    border-right: none;
+  }
+  
   .header-inner {
     gap: 24px;
   }
@@ -1138,7 +1260,7 @@ h3.custom-row-title:hover,
   }
   
   .catalog-grid {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     gap: 20px;
   }
   
@@ -1209,17 +1331,13 @@ h3.custom-row-title:hover,
     gap: 30px;
   }
   
-  .stat-number {
-    font-size: 24px;
-  }
-  
   .catalog-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 16px;
   }
   
   .movie-poster {
-    height: 220px;
+    height: 200px;
   }
   
   .footer-content {
@@ -1262,20 +1380,25 @@ h3.custom-row-title:hover,
   }
   
   .custom-row-movie-card {
-    width: 160px !important;
-    min-width: 160px !important;
-    max-width: 160px !important;
+    width: 150px !important;
+    min-width: 150px !important;
+    max-width: 150px !important;
   }
   
   .custom-row-view-all-card {
-    width: 160px !important;
-    min-width: 160px !important;
-    max-width: 160px !important;
-    height: 240px;
+    width: 150px !important;
+    min-width: 150px !important;
+    max-width: 150px !important;
+    height: 225px;
   }
   
   .custom-row-section .custom-scroll-btn {
     display: none;
+  }
+  
+  .sidebar {
+    height: 80px;
+    background: transparent;
   }
   
   /* Мобильное модальное окно кастомного ряда */
@@ -1284,7 +1407,7 @@ h3.custom-row-title:hover,
   }
   
   .custom-modal-content {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
     gap: 15px !important;
   }
 }
@@ -1313,7 +1436,7 @@ h3.custom-row-title:hover,
   }
   
   .movie-poster {
-    height: 200px;
+    height: 180px;
   }
   
   .footer-links {
@@ -1330,16 +1453,16 @@ h3.custom-row-title:hover,
   }
   
   .custom-row-movie-card {
-    width: 140px !important;
-    min-width: 140px !important;
-    max-width: 140px !important;
+    width: 130px !important;
+    min-width: 130px !important;
+    max-width: 130px !important;
   }
   
   .custom-row-view-all-card {
-    width: 140px !important;
-    min-width: 140px !important;
-    max-width: 140px !important;
-    height: 210px;
+    width: 130px !important;
+    min-width: 130px !important;
+    max-width: 130px !important;
+    height: 195px;
   }
   
   .custom-row-movie-card .movie-buttons-overlay {
@@ -1396,6 +1519,7 @@ h3.custom-row-title:hover,
       scroll-left: var(--end-scroll);
   }
 }
+
 /* СИЛЬНЫЕ ИСПРАВЛЕНИЯ ДЛЯ РАССТОЯНИЯ И ЗАТЕМНЕНИЯ */
 
 /* 1. СИЛЬНОЕ уменьшение расстояния */
@@ -1427,7 +1551,7 @@ h3.custom-row-title:hover,
 
 /* 2. СИЛЬНОЕ затемнение обложек */
 .movie-card:hover .movie-poster {
-  filter: brightness(0.4) !important; /* Очень сильное затемнение */
+  filter: brightness(0.4) !important;
 }
 
 .custom-row-movie-card:hover .movie-poster {
@@ -1478,6 +1602,7 @@ h3.custom-row-title:hover,
   pointer-events: none;
   border-radius: 12px;
 }
+
 /* СИЛЬНЫЕ ИСПРАВЛЕНИЯ ДЛЯ РАССТОЯНИЯ - РАБОТАЕТ 100% */
 
 /* 1. СБРАСЫВАЕМ ВСЕ ВОЗМОЖНЫЕ СТИЛИ */
