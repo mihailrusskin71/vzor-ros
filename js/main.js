@@ -2,6 +2,7 @@
 import { FilmManager } from './modules/filmManager.js';
 import { UserManager } from './modules/userManager.js';
 import { ContentManager } from './modules/contentManager.js';
+import { LightBackgroundBeams } from './light-background-beams.js';
 import { initModals, showMovieInfo, showAuthModal, updateUserProfile, showSaveNotification, showSavedMovies, showMyReviews, showEditMovieModal, showReviewsModal, showReviewsModalForCurrentMovie, showFiltersModal, removeFilter, showContentFiltersModal, removeContentFilter } from './modules/modals.js';
 import { initSearch } from './modules/search.js';
 import { initAdmin, showAdminPanel } from './modules/admin.js';
@@ -18,6 +19,7 @@ window.ROW_TYPES = ROW_TYPES;
 window.filmManager = null;
 window.userManager = null;
 window.contentManager = null;
+window.backgroundBeams = null;
 
 // Filter variables
 window.currentPartnerFilter = 'all';
@@ -109,33 +111,43 @@ window.showReviewsModalForCurrentMovie = function() {
 window.removeFilter = removeFilter;
 window.removeContentFilter = removeContentFilter;
 
+// Главная функция инициализации
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Initializing Vzorkino...');
+    console.log('🚀 Инициализация VzorRos...');
     
     try {
-        // Initialize managers
+        // Инициализируем оранжевый фон СРАЗУ
+        window.backgroundBeams = new LightBackgroundBeams();
+        console.log('✅ Оранжевый фон инициализирован');
+        
+        // Быстрая инициализация менеджеров
         window.filmManager = new FilmManager();
         window.userManager = new UserManager();
         
-        // СРАЗУ создаем ContentManager для мгновенного показа
-        window.contentManager = new ContentManager();
+        // СРАЗУ запускаем мгновенную инициализацию
+        window.filmManager.init().then(() => {
+            // Создаем ContentManager после загрузки данных
+            window.contentManager = new ContentManager();
+            
+            // Инициализируем остальные модули
+            initModals();
+            initSearch();
+            initAdmin();
+            setupSecretAdmin();
+            
+            // Обновляем UI
+            updateUserProfile();
+            
+            console.log('✅ VzorRos инициализирован мгновенно!');
+        }).catch(error => {
+            console.error('❌ Ошибка инициализации FilmManager:', error);
+        });
         
-        // Initialize modules
-        initModals();
-        initSearch();
-        initAdmin();
-        setupSecretAdmin();
-        
-        // Update UI
-        updateUserProfile();
-        
-        console.log('Vzorkino initialized successfully');
     } catch (error) {
-        console.error('Error initializing Vzorkino:', error);
+        console.error('❌ Ошибка инициализации VzorRos:', error);
     }
 });
 
-// Добавьте в конец файла main.js перед последней скобкой
 // Функция для открытия модального окна кастомного ряда
 window.showCustomRowModal = function(rowId) {
     if (!window.filmManager) return;
